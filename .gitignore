@@ -1,0 +1,17 @@
+*-debug.log
+*-error.log
+/.nyc_output
+/dist
+/lib
+/package-lock.json
+/tmp
+node_modules
+data/
+.DS_Store
+.envrc
+npm-shrinkwrap.json
+oclif.manifest.json
+yarn.lock
+.vscode/
+
+.idea/

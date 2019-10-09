@@ -1,0 +1,73 @@
+{
+  "name": "json-bourne-sfdx",
+  "description": "A CLI plugin for Salesforce CLI to push and pull CPQ data",
+  "version": "0.1.0",
+  "author": "REA Group Ltd",
+  "bugs": "https://git.realestate.com.au/the-money/json-bourne/issues",
+  "dependencies": {
+    "@oclif/command": "1",
+    "@oclif/config": "1",
+    "@oclif/errors": "1",
+    "@salesforce/command": "^2.0.0",
+    "@types/jsforce": "^1.9.4",
+    "colors": "^1.3.1",
+    "console.table": "^0.10.0",
+    "jsforce": "^1.9.2",
+    "lodash": "^4.17.11",
+    "tslib": "1",
+    "uuid": "^3.3.2",
+    "verbose": "^0.2.3"
+  },
+  "devDependencies": {
+    "@oclif/dev-cli": "^1.15.4",
+    "@oclif/plugin-help": "^2.2.0",
+    "@oclif/test": "^1",
+    "@salesforce/dev-config": "^1.4.4",
+    "@types/chai": "4",
+    "@types/mocha": "5",
+    "@types/node": "^12.0.8",
+    "chai": "^4",
+    "globby": "^9.2.0",
+    "mocha": "^6.1.4",
+    "nyc": "^14.1.1",
+    "sinon": "^7.3.2",
+    "ts-node": "^8.3.0",
+    "typescript": "^3.5.2"
+  },
+  "engines": {
+    "node": ">=8.0.0"
+  },
+  "files": [
+    "/lib",
+    "/messages",
+    "/npm-shrinkwrap.json",
+    "/.oclif.manifest.json"
+  ],
+  "homepage": "https://git.realestate.com.au/the-money/json-bourne",
+  "keywords": [
+    "sfdx-plugin",
+    "json-bourne",
+    "json-bourne-sfdx"
+  ],
+  "license": "MIT",
+  "oclif": {
+    "commands": "./lib/commands",
+    "topics": {
+      "hello": {
+        "description": "Commands to say hello."
+      }
+    },
+    "devPlugins": [
+      "@oclif/plugin-help"
+    ]
+  },
+  "repository": "Workspace/json-bourne-sfdx",
+  "scripts": {
+    "postpack": "rm -f .oclif.manifest.json npm-shrinkwrap.json",
+    "posttest": "tsc -p test --noEmit && tslint -p test -t stylish",
+    "prepack": "rm -rf lib && tsc && oclif-dev manifest && oclif-dev readme && npm shrinkwrap",
+    "prepare": "rm -rf lib && tsc && oclif-dev manifest && oclif-dev readme && npm shrinkwrap",
+    "test": "nyc mocha --forbid-only \"test/**/*.test.ts\"",
+    "version": "oclif-dev readme && git add README.md"
+  }
+}

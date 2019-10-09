@@ -1,0 +1,12 @@
+{
+  "commandDescription": "import/export reference data from Salesforce into your dx project files",
+  "pullDescription": "Exports records from the object specified.",
+  "pushDescription": "Imports records from the object specified.",
+  "pushAllDescription": "Imports records from all objects specified in the config file.",
+  "pullAllDescription": "Exports records from all objects specified in the config file.",
+  "objectDescription": "The sobject that you wish to import/export reference data from.",
+  "allObjectsDescription": "Import/export from all objects.",
+  "configFileDescription": "[REQUIRED] The configuration JSON file location.",
+  "pathToDataDir": "The path where the reference data resides. The default is 'data'.",
+  "removeObjects": "Delete the record(s) from the target within the specified directory."
+}
