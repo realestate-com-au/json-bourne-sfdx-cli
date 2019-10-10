@@ -134,6 +134,12 @@ The configuration file can be stored within a Salesforce DX project, for example
 
 > All data that is exported using JSON Bourne will be saved into a `data/` directory (and into subdirectories that are the names specified on each object configuration specified within the configuration file). Ensure the `data/` directory exists in your Salesforce DX project before exporting any reference data.
 
+### Configuration Files Templates
+
+These configuration files relate to common Salesforce packages. Crafting the configuration file can be the most difficult part of setting up JSON Bourne, so this list is a way to kick start your implementation. If you have any configuration files crafted please add them to this list!
+
+- [Salesforce CPQ Configuration File](https://gist.github.com/ddawson235/c6e639691d0876c3b0b591faf66a4565) (David Dawson [@ddawson234](https://github.com/ddawson235))
+
 # Plugin commands
 
 <!-- toc -->
