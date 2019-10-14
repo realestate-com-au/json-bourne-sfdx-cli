@@ -1,6 +1,7 @@
 import { flags, SfdxCommand } from "@salesforce/command";
 import { Helper } from "../../helper/Helper";
 import { AnyJson } from "@salesforce/ts-types";
+import { core } from "@salesforce/command";
 import * as _ from "lodash";
 
 export default class Export extends SfdxCommand {
@@ -43,23 +44,23 @@ export default class Export extends SfdxCommand {
     records.forEach(record => {
       Helper.removeField(record, "attributes");
       this.removeNullFields(record, sObjectName);
-      let filename =
-        dirPath +
-        "/" +
-        record[Export.config.objects[sObjectName].filename].replace(
-          /\s+/g,
-          "-"
-        ) +
-        ".json";
-      Helper.fs.writeFile(
-        filename,
-        JSON.stringify(record, undefined, 2),
-        function(err) {
-          if (err) {
-            throw err;
+      let fileName = record[Export.config.objects[sObjectName].externalid];
+      if (fileName == null) {
+        throw new core.SfdxError(
+          "There are records without External Ids. Ensure all records that are extracted have a value for the field specified as the External Id."
+        );
+      } else {
+        fileName = dirPath + "/" + fileName.replace(/\s+/g, "-") + ".json";
+        Helper.fs.writeFile(
+          fileName,
+          JSON.stringify(record, undefined, 2),
+          function(err) {
+            if (err) {
+              throw err;
+            }
           }
-        }
-      );
+        );
+      }
     });
   }
 
