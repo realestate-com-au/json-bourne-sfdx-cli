@@ -40,15 +40,16 @@ export default class Export extends SfdxCommand {
   }
 
   private exportRecordsToDir(records, sObjectName, dirPath) {
+    let externalIdField = Export.config.objects[sObjectName].externalid;
+    if (records.length > 0 && !records[0].hasOwnProperty(externalIdField)) {
+      throw new core.SfdxError(
+        "The External Id provided on the configuration file does not exist on the extracted record(s). Please ensure it is included in the object's query."
+      );
+    }
+
     records.forEach(record => {
       Helper.removeField(record, "attributes");
       this.removeNullFields(record, sObjectName);
-      let externalIdField = Export.config.objects[sObjectName].externalid;
-      if (!record.hasOwnProperty(externalIdField)) {
-        throw new core.SfdxError(
-          "The External Id provided on the configuration file does not exist on the extracted record(s). Please ensure it is included in the object's query."
-        );
-      }
       let fileName = record[externalIdField];
       if (fileName == null) {
         throw new core.SfdxError(
