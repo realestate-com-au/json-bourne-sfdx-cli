@@ -1,4 +1,4 @@
-import { flags, SfdxCommand } from "@salesforce/command";
+import { flags, SfdxCommand, core } from "@salesforce/command";
 import { Helper } from "../../helper/Helper";
 import { AnyJson } from "@salesforce/ts-types";
 import * as _ from "lodash";
@@ -40,26 +40,33 @@ export default class Export extends SfdxCommand {
   }
 
   private exportRecordsToDir(records, sObjectName, dirPath) {
+    let externalIdField = Export.config.objects[sObjectName].externalid;
+    if (records.length > 0 && !records[0].hasOwnProperty(externalIdField)) {
+      throw new core.SfdxError(
+        "The External Id provided on the configuration file does not exist on the extracted record(s). Please ensure it is included in the object's query."
+      );
+    }
+
     records.forEach(record => {
       Helper.removeField(record, "attributes");
       this.removeNullFields(record, sObjectName);
-      let filename =
-        dirPath +
-        "/" +
-        record[Export.config.objects[sObjectName].filename].replace(
-          /\s+/g,
-          "-"
-        ) +
-        ".json";
-      Helper.fs.writeFile(
-        filename,
-        JSON.stringify(record, undefined, 2),
-        function(err) {
-          if (err) {
-            throw err;
+      let fileName = record[externalIdField];
+      if (fileName == null) {
+        throw new core.SfdxError(
+          "There are records without External Ids. Ensure all records that are extracted have a value for the field specified as the External Id."
+        );
+      } else {
+        fileName = dirPath + "/" + fileName.replace(/\s+/g, "-") + ".json";
+        Helper.fs.writeFile(
+          fileName,
+          JSON.stringify(record, undefined, 2),
+          function(err) {
+            if (err) {
+              throw err;
+            }
           }
-        }
-      );
+        );
+      }
     });
   }
 

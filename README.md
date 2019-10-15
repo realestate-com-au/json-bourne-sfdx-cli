@@ -95,7 +95,6 @@ The plugin requires a configuration file. Here is an example:
       "query": "SELECT Name, FieldOne__c, FieldTwo__c, Migration_Id__c FROM ObjectOne__c",
       "externalid": "Migration_ID__c",
       "directory": "objectOne",
-      "filename": "Migration_ID__c",
       "cleanupFields": [],
       "hasRecordTypes": false
     },
@@ -103,7 +102,6 @@ The plugin requires a configuration file. Here is an example:
       "query": "SELECT Name, ObjectOne__r.Migration_Id__c, Migration_Id__c, FieldOne__c, RecordType.DeveloperName FROM ObjectTwo__c",
       "externalid": "Migration_Id__c",
       "directory": "objectTwo",
-      "filename": "Migration_Id__c",
       "cleanupFields": ["ObjectOne__r"],
       "hasRecordTypes": true,
       "enableMultiThreading": true
@@ -123,9 +121,8 @@ The plugin requires a configuration file. Here is an example:
 | `allObjects`                   | An array with all of the objects (the order they are specified is the order they are processed)                                                                                                                                                                                                                                        |
 | `objects`                      | An array of configuration for each object (there should be one entry per entry in the `allObjects` array)                                                                                                                                                                                                                              |
 | `objects:query`                | The query that is performed to `export` the data from Salesforce                                                                                                                                                                                                                                                                       |
-| `objects:externalId`           | The external id field for this object (API Name)                                                                                                                                                                                                                                                                                       |
-| `objects:directory`            | The name of the directory the extracted data will be stored in. It is a relevant path from where the export command is executed of `data/directory`                                                                                                                                                                                    |
-| `objects:filename`             | The field used to determine the filename (must be unique)                                                                                                                                                                                                                                                                              |
+| `objects:externalId`           | The external id field for this object (API Name). This will also be used as the file name for the extracted json files.                                                                                                                                                                                                                |
+| `objects:directory`            | The name of the directory the extracted data will be stored in. It is a relevant path from where the export command is executed of `data/directory`                                                                                                                                                                                    |  |
 | `objects:cleanupFields`        | Any fields fetched from a parent lookup that may be blank should be specified here. For example, if you are retrieving the Migration Id of a parent (`ObjectOne__r.Migration_Id__c`) and this lookup _could_ be blank, then `ObjectOne__r` should be added to this array as the plugin cannot handle null values on parent references. |
 | `objects:hasRecordTypes`       | Whether dynamic record type Ids need to be handled or not (if true, ensure the `RecordType.DeveloperName` is in the query)                                                                                                                                                                                                             |
 | `objects:enableMultiThreading` | The payloads can be imported into this object in parallel (instead of one after the other).                                                                                                                                                                                                                                            |
