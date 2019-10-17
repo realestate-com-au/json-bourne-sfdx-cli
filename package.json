@@ -1,9 +1,9 @@
 {
   "name": "json-bourne-sfdx",
   "description": "A CLI plugin for Salesforce CLI to push and pull CPQ data",
-  "version": "0.1.0",
+  "version": "0.1.0-210",
   "author": "REA Group Ltd",
-  "bugs": "https://git.realestate.com.au/the-money/json-bourne/issues",
+  "bugs": "https://github.com/realestate-com-au/json-bourne-sfdx-cli/issues",
   "dependencies": {
     "@oclif/command": "1",
     "@oclif/config": "1",
@@ -43,7 +43,7 @@
     "/npm-shrinkwrap.json",
     "/.oclif.manifest.json"
   ],
-  "homepage": "https://git.realestate.com.au/the-money/json-bourne",
+  "homepage": "https://github.com/realestate-com-au/json-bourne-sfdx-cli",
   "keywords": [
     "sfdx-plugin",
     "json-bourne",
