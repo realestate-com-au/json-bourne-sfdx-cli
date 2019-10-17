@@ -61,7 +61,7 @@
       "@oclif/plugin-help"
     ]
   },
-  "repository": "realestate-com-au/json-bourne-sfdx",
+  "repository": "realestate-com-au/json-bourne-sfdx-cli",
   "scripts": {
     "postpack": "rm -f .oclif.manifest.json npm-shrinkwrap.json",
     "posttest": "tsc -p test --noEmit && tslint -p test -t stylish",
