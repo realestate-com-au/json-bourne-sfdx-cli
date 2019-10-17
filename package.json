@@ -1,7 +1,7 @@
 {
   "name": "json-bourne-sfdx",
   "description": "A CLI plugin for Salesforce CLI to push and pull CPQ data",
-  "version": "0.1.0-210",
+  "version": "0.1.0",
   "author": "REA Group Ltd",
   "bugs": "https://github.com/realestate-com-au/json-bourne-sfdx-cli/issues",
   "dependencies": {
