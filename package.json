@@ -15,8 +15,7 @@
     "jsforce": "^1.9.2",
     "lodash": "^4.17.11",
     "tslib": "1",
-    "uuid": "^3.3.2",
-    "verbose": "^0.2.3"
+    "uuid": "^3.3.2"
   },
   "devDependencies": {
     "@oclif/dev-cli": "^1.15.4",
