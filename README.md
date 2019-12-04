@@ -198,7 +198,7 @@ EXAMPLE
        Requesting data, please wait.... Request completed! Received X records.
 ```
 
-_See code: [src/commands/bourne/export.ts](https://github.com/Workspace/json-bourne-sfdx/blob/v0.1.0/src/commands/bourne/export.ts)_
+_See code: [src/commands/bourne/export.ts](https://github.com/realestate-com-au/json-bourne-sfdx-cli/blob/v0.1.1/src/commands/bourne/export.ts)_
 
 ## `json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
 
@@ -241,8 +241,7 @@ EXAMPLE
        Deploying data, please wait.... Deployment completed!
 ```
 
-_See code: [src/commands/bourne/import.ts](https://github.com/Workspace/json-bourne-sfdx/blob/v0.1.0/src/commands/bourne/import.ts)_
-
+_See code: [src/commands/bourne/import.ts](https://github.com/realestate-com-au/json-bourne-sfdx-cli/blob/v0.1.1/src/commands/bourne/import.ts)_
 <!-- commandsstop -->
 
 License
