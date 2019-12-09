@@ -6,7 +6,7 @@ This plugin allows you to migrate reference data between Salesforce environments
 
 JSON Bourne consists of two parts:
 
-1. A Salesforce managed package that largely consists of an API to receive the data being imported.
+1. A Salesforce managed package that largely consists of an API to receive the data being imported (which is also open source, and can be found [here](https://github.com/realestate-com-au/json-bourne-sfdx-pkg).
 2. A Salesforce CLI plugin that allows you to orchestrate the import and export of data (which can be run by a developer or installed into a CI pipeline).
 
 # Salesforce Managed Package
