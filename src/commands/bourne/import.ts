@@ -99,8 +99,8 @@ export default class Import extends SfdxCommand {
       let record = JSON.parse(original);
       if (configObject.hasRecordTypes && recordTypeRef) {
         if (recordTypeRef.hasOwnProperty(record.RecordType.DeveloperName)) {
+          record.RecordTypeId = recordTypeRef[record.RecordType.DeveloperName];
           delete record.RecordType;
-          record.RecordTypeId = recordTypeRef.developerName;
         } else if (record.RecordType) {
           console.log(
             "This record does not contain a value for Record Type, skipping transformation."
