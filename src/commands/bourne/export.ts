@@ -86,24 +86,22 @@ export default class Export extends SfdxCommand {
   }
 
   private async getExportRecords(sObject: any) {
-    let records = [];
-    let offset: number = 0;
-    let hasRecords: boolean = true;
-    do {
-      let result = await this.connection.query(
-        `${Export.config.objects[sObject].query} LIMIT ${Export.config.pollBatchSize} OFFSET ${offset}`
-      );
-      if (result && result.records.length > 0) {
-        Array.prototype.push.apply(records, result.records);
-        offset = offset + result.records.length;
-        if (result.records.length < Export.config.pollBatchSize) {
-          hasRecords = false;
-        }
-      } else {
-        hasRecords = false;
-      }
-    } while (hasRecords === true);
-    return records;
+    return new Promise( (resolve) => {
+      var records = [];
+      var query = this.connection.query(`${Export.config.objects[sObject].query}`)
+      .on("record", (record) => {
+        records.push(record);
+      })
+      .on("end", () => {
+        console.log("total in database : " + query.totalSize);
+        console.log("total fetched : " + query.totalFetched);
+        resolve(records);
+      })
+      .on("error", (err) => {
+        console.error(err);
+      })
+      .run({ autoFetch : true, maxFetch : 100000 });
+    });
   }
 
   private clearDirectory(dirPath: string) {
