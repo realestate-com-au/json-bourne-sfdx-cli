@@ -12,30 +12,30 @@ export default class Import extends SfdxCommand {
   public static examples = [
     `$ sfdx bourne:import -o Product2 -u myOrg -c config/cpq-cli-def.json
     Deploying data, please wait.... Deployment completed!
-    `
+    `,
   ];
 
   protected static flagsConfig: any = {
     object: flags.string({
       char: "o",
-      description: Helper.messages.getMessage("objectDescription")
+      description: Helper.messages.getMessage("objectDescription"),
     }),
     configfile: flags.string({
       char: "c",
-      description: Helper.messages.getMessage("configFileDescription")
+      description: Helper.messages.getMessage("configFileDescription"),
     }),
     processall: flags.boolean({
       char: "a",
-      description: Helper.messages.getMessage("pushAllDescription")
+      description: Helper.messages.getMessage("pushAllDescription"),
     }),
     datadir: flags.string({
       char: "d",
-      description: Helper.messages.getMessage("pathToDataDir")
+      description: Helper.messages.getMessage("pathToDataDir"),
     }),
     remove: flags.boolean({
       char: "r",
-      description: Helper.messages.getMessage("removeObjects")
-    })
+      description: Helper.messages.getMessage("removeObjects"),
+    }),
   };
 
   public static args = [{ name: "file" }];
@@ -64,7 +64,7 @@ export default class Import extends SfdxCommand {
         `SELECT Id, Name, DeveloperName FROM RecordType WHERE sObjectType ='${sObject}'`
       );
       if (recordTypes && recordTypes.records.length > 0) {
-        recordTypes.records.forEach(recordType => {
+        recordTypes.records.forEach((recordType) => {
           recordTypeRef[recordType.DeveloperName] = recordType.Id;
         });
       }
@@ -77,7 +77,7 @@ export default class Import extends SfdxCommand {
     let dirPath = this.getDataDir() + "/" + configObject.directory;
     if (Helper.fs.existsSync(dirPath)) {
       let files = Helper.fs.readdirSync(dirPath);
-      return files.map(file => {
+      return files.map((file) => {
         let filePath = dirPath + "/" + file;
         try {
           return Helper.fs.readFileSync(filePath, "utf8");
@@ -95,7 +95,7 @@ export default class Import extends SfdxCommand {
     configObject: any,
     originalRecords: any[]
   ) {
-    return originalRecords.map(original => {
+    return originalRecords.map((original) => {
       let record = JSON.parse(original);
       if (configObject.hasRecordTypes && recordTypeRef) {
         if (recordTypeRef.hasOwnProperty(record.RecordType.DeveloperName)) {
@@ -148,10 +148,10 @@ export default class Import extends SfdxCommand {
 
   private getProcessPayload(isManagedPackage) {
     let restUrl = isManagedPackage == true ? "/JSON/bourne/v1" : "/bourne/v1";
-    return (function() {
-      return function(payload, connection) {
-        return new Promise(resolve => {
-          let resultPromise = connection.apex.post(restUrl, payload, err => {
+    return (function () {
+      return function (payload, connection) {
+        return new Promise((resolve) => {
+          let resultPromise = connection.apex.post(restUrl, payload, (err) => {
             if (err) {
               return console.error(err);
             }
@@ -164,10 +164,10 @@ export default class Import extends SfdxCommand {
 
           resolve(
             resultPromise
-              .then(result => {
+              .then((result) => {
                 return result;
               })
-              .catch(error => {
+              .catch((error) => {
                 console.log(error);
               })
           );
@@ -190,7 +190,7 @@ export default class Import extends SfdxCommand {
       let processPayload = this.getProcessPayload(useManagedPackage);
       if (configObject.enableMultiThreading) {
         let promises = [];
-        payloads.forEach(payload =>
+        payloads.forEach((payload) =>
           promises.push(processPayload(payload, connection))
         );
         responses = await Promise.all(promises);
@@ -241,9 +241,11 @@ export default class Import extends SfdxCommand {
         if (importResult.failure == 0) {
           success = true;
         } else if (retries + 1 == Import.config.importRetries) {
-          throw "Import was unsuccessful after " +
+          throw (
+            "Import was unsuccessful after " +
             Import.config.importRetries +
-            " attempts.";
+            " attempts."
+          );
         } else {
           console.log("Retrying...");
           retries++;

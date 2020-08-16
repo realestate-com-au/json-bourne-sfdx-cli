@@ -9,7 +9,7 @@ export default class Export extends SfdxCommand {
   public static examples = [
     `$ sfdx bourne:export -o Product2 -u myOrg -c config/cpq-cli-def.json
     Requesting data, please wait.... Request completed! Received X records.
-    `
+    `,
   ];
 
   public static args = [{ name: "file" }];
@@ -17,16 +17,16 @@ export default class Export extends SfdxCommand {
   protected static flagsConfig: any = {
     object: flags.string({
       char: "o",
-      description: Helper.messages.getMessage("objectDescription")
+      description: Helper.messages.getMessage("objectDescription"),
     }),
     configfile: flags.string({
       char: "c",
-      description: Helper.messages.getMessage("configFileDescription")
+      description: Helper.messages.getMessage("configFileDescription"),
     }),
     processall: flags.boolean({
       char: "a",
-      description: Helper.messages.getMessage("pullAllDescription")
-    })
+      description: Helper.messages.getMessage("pullAllDescription"),
+    }),
   };
 
   protected static requiresUsername = true;
@@ -47,7 +47,7 @@ export default class Export extends SfdxCommand {
       );
     }
 
-    records.forEach(record => {
+    records.forEach((record) => {
       Helper.removeField(record, "attributes");
       this.removeNullFields(record, sObjectName);
       let fileName = record[externalIdField];
@@ -60,7 +60,7 @@ export default class Export extends SfdxCommand {
         Helper.fs.writeFile(
           fileName,
           JSON.stringify(record, undefined, 2),
-          function(err) {
+          function (err) {
             if (err) {
               throw err;
             }
@@ -71,7 +71,7 @@ export default class Export extends SfdxCommand {
   }
 
   private removeNullFields(record, sObjectName) {
-    Export.config.objects[sObjectName].cleanupFields.forEach(fields => {
+    Export.config.objects[sObjectName].cleanupFields.forEach((fields) => {
       if (null === record[fields]) {
         delete record[fields];
         let lookupField: string;
@@ -86,28 +86,29 @@ export default class Export extends SfdxCommand {
   }
 
   private async getExportRecords(sObject: any): Promise<any[]> {
-    return new Promise( (resolve) => {
+    return new Promise((resolve) => {
       var records = [];
-      var query = this.connection.query(`${Export.config.objects[sObject].query}`)
-      .on("record", (record) => {
-        records.push(record);
-      })
-      .on("end", () => {
-        console.log("total in database : " + query.totalSize);
-        console.log("total fetched : " + query.totalFetched);
-        resolve(records);
-      })
-      .on("error", (err) => {
-        console.error(err);
-      })
-      .run({ autoFetch : true, maxFetch : 100000 });
+      var query = this.connection
+        .query(`${Export.config.objects[sObject].query}`)
+        .on("record", (record) => {
+          records.push(record);
+        })
+        .on("end", () => {
+          console.log("total in database : " + query.totalSize);
+          console.log("total fetched : " + query.totalFetched);
+          resolve(records);
+        })
+        .on("error", (err) => {
+          console.error(err);
+        })
+        .run({ autoFetch: true, maxFetch: 100000 });
     });
   }
 
   private clearDirectory(dirPath: string) {
     if (Helper.fs.existsSync(dirPath)) {
-      Helper.fs.readdirSync(dirPath).forEach(file => {
-        Helper.fs.unlink(dirPath + "/" + file, err => {
+      Helper.fs.readdirSync(dirPath).forEach((file) => {
+        Helper.fs.unlink(dirPath + "/" + file, (err) => {
           if (err) {
             throw err;
           }
