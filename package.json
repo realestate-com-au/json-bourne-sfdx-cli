@@ -25,10 +25,14 @@
     "@types/chai": "4",
     "@types/mocha": "5",
     "@types/node": "^12.0.8",
+    "@typescript-eslint/eslint-plugin": "^3.9.0",
+    "@typescript-eslint/parser": "^3.9.0",
     "chai": "^4",
+    "eslint": "^7.7.0",
     "globby": "^9.2.0",
     "mocha": "^6.1.4",
     "nyc": "^14.1.1",
+    "prettier": "^2.0.5",
     "sinon": "^7.3.2",
     "ts-node": "^8.3.0",
     "typescript": "^3.5.2"
@@ -62,6 +66,7 @@
   },
   "repository": "realestate-com-au/json-bourne-sfdx-cli",
   "scripts": {
+    "lint": "eslint . --ext .ts",
     "postpack": "rm -f .oclif.manifest.json npm-shrinkwrap.json",
     "posttest": "tsc -p test --noEmit && tslint -p test -t stylish",
     "prepack": "rm -rf lib && tsc && oclif-dev manifest && oclif-dev readme && npm shrinkwrap",
