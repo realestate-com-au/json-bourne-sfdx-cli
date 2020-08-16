@@ -15,7 +15,7 @@ jobs:
       with:
         node-version: 10.0.0
     - name: Install packages
-      run: npm install --only=dev
+      run: npm install prettier
     - name: Run Style Check
       run: npx prettier -c **.ts
     
@@ -30,6 +30,6 @@ jobs:
       with:
         node-version: 10.0.0
     - name: Install packages
-      run: npm install --only=dev
+      run: npm install typescript
     - name: Run TypeScript Build
       run: tsc --build
