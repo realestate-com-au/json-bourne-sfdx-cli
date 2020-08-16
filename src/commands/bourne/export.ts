@@ -85,7 +85,7 @@ export default class Export extends SfdxCommand {
     });
   }
 
-  private async getExportRecords(sObject: any) {
+  private async getExportRecords(sObject: any): Promise<any[]> {
     return new Promise( (resolve) => {
       var records = [];
       var query = this.connection.query(`${Export.config.objects[sObject].query}`)
