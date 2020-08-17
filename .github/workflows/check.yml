@@ -1,6 +1,6 @@
 name: check
 on:
-  pull_request_event:
+  pull_request_target:
     branches:
       - master
 jobs:
