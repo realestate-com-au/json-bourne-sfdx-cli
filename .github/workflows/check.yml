@@ -1,0 +1,36 @@
+name: check
+on:
+  pull_request:
+    branches:
+      - master
+jobs:
+  lint:
+    name: prettier
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@master
+    - name: Set up Node.js
+      uses: actions/setup-node@master
+      with:
+        node-version: '10.x'
+    - name: Install packages
+      run: npm install prettier
+    - name: Run Style Check
+      run: npx prettier -c **.ts
+    
+  build:
+    name: typescript-build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@master
+    - name: Set up Node.js
+      uses: actions/setup-node@master
+      with:
+        node-version: '10.x'
+    - name: Install packages
+      run: npm i
+    - name: Run TypeScript Build
+      run: tsc --build
+      

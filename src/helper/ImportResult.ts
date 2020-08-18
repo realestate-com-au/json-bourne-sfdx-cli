@@ -21,14 +21,14 @@ export class ImportResult {
   }
 
   private getFailureResults() {
-    return this.results.filter(result => {
+    return this.results.filter((result) => {
       return result.result === "FAILED";
     });
   }
 
   private getResult() {
     let resolveResults = [];
-    this.responses.forEach(res => {
+    this.responses.forEach((res) => {
       resolveResults = resolveResults.concat(JSON.parse(res));
     });
     return resolveResults;
