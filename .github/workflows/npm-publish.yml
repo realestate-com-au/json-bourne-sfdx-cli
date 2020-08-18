@@ -14,8 +14,8 @@ jobs:
         node-version: '12.x'
         registry-url: 'https://registry.npmjs.org'
     - run: |
-      npm install
-      tsc --build
+        npm install
+        tsc --build
     - run: npm publish
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
