@@ -94,12 +94,12 @@ export default class Export extends SfdxCommand {
           records.push(record);
         })
         .on("end", () => {
-          console.log("total in database : " + query.totalSize);
-          console.log("total fetched : " + query.totalFetched);
+          this.ux.log("total in database : " + query.totalSize);
+          this.ux.log("total fetched : " + query.totalFetched);
           resolve(records);
         })
         .on("error", (err) => {
-          console.error(err);
+          this.ux.error(err);
         })
         .run({ autoFetch: true, maxFetch: 100000 });
     });
