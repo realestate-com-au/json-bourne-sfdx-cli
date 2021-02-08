@@ -58,7 +58,7 @@ export default class Import extends SfdxCommand {
   private async getRecordTypeRef(sObject, configObject) {
     let recordTypeRef = {};
     if (configObject.hasRecordTypes) {
-      console.log(Helper.colors.blue("Aligning RecordType IDs..."));
+      this.ux.log(Helper.colors.blue("Aligning RecordType IDs..."));
       this.ux.startSpinner("Processing");
       let recordTypes: any = await this.connection.query(
         `SELECT Id, Name, DeveloperName FROM RecordType WHERE sObjectType ='${sObject}'`
@@ -102,7 +102,7 @@ export default class Import extends SfdxCommand {
           record.RecordTypeId = recordTypeRef[record.RecordType.DeveloperName];
           delete record.RecordType;
         } else if (record.RecordType) {
-          console.log(
+          this.ux.log(
             "This record does not contain a value for Record Type, skipping transformation."
           );
         } else {
@@ -158,7 +158,7 @@ export default class Import extends SfdxCommand {
           });
 
           if (typeof resultPromise === "undefined") {
-            console.log("Error: Undefined promise");
+            this.ux.log("Error: Undefined promise");
             return;
           }
 
@@ -168,7 +168,7 @@ export default class Import extends SfdxCommand {
                 return result;
               })
               .catch((error) => {
-                console.log(error);
+                this.ux.log(error);
               })
           );
         });
@@ -225,7 +225,7 @@ export default class Import extends SfdxCommand {
           originalRecords
         );
 
-        console.log("Deploying " + Helper.colors.blue(sObject) + " records");
+        this.ux.log("Deploying " + Helper.colors.blue(sObject) + " records");
 
         let responses = await this.importRecords(
           records,
@@ -247,7 +247,7 @@ export default class Import extends SfdxCommand {
             " attempts."
           );
         } else {
-          console.log("Retrying...");
+          this.ux.log("Retrying...");
           retries++;
         }
       } while (success == false && retries < Import.config.importRetries);
