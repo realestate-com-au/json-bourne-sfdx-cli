@@ -140,36 +140,38 @@ These configuration files relate to common Salesforce packages. Crafting the con
 # Plugin commands
 
 <!-- toc -->
-
+* [JSON Bourne](#json-bourne)
+* [Salesforce Managed Package](#salesforce-managed-package)
+* [Salesforce CLI Plugin](#salesforce-cli-plugin)
+* [Plugin commands](#plugin-commands)
 <!-- tocstop -->
 <!-- install -->
 <!-- usage -->
-
 ```sh-session
 $ npm install -g json-bourne-sfdx
 $ json-bourne-sfdx COMMAND
 running command...
 $ json-bourne-sfdx (-v|--version|version)
-json-bourne-sfdx/0.1.0 darwin-x64 node-v8.11.2
+json-bourne-sfdx/0.1.1-217 darwin-x64 node-v14.15.1
 $ json-bourne-sfdx --help [COMMAND]
 USAGE
   $ json-bourne-sfdx COMMAND
 ...
 ```
-
 <!-- usagestop -->
 <!-- commands -->
-
-- [`json-bourne-sfdx bourne:export [-o <string>] [-c <string>] [-a] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#json-bourne-sfdx-bourneexport--o-string--c-string--a--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
-- [`json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#json-bourne-sfdx-bourneimport--o-string--c-string--a--d-string--r--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
+* [`json-bourne-sfdx bourne:export [-o <string>] [-c <string>] [-a] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#json-bourne-sfdx-bourneexport--o-string--c-string--a--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
+* [`json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#json-bourne-sfdx-bourneimport--o-string--c-string--a--d-string--r--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
 
 ## `json-bourne-sfdx bourne:export [-o <string>] [-c <string>] [-a] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
 
 Exports records from the object specified.
 
 ```
+Exports records from the object specified.
+
 USAGE
-  $ json-bourne-sfdx bourne:export [-o <string>] [-c <string>] [-a] [-u <string>] [--apiversion <string>] [--json]
+  $ json-bourne-sfdx bourne:export [-o <string>] [-c <string>] [-a] [-u <string>] [--apiversion <string>] [--json] 
   [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]
 
 OPTIONS
@@ -198,15 +200,17 @@ EXAMPLE
        Requesting data, please wait.... Request completed! Received X records.
 ```
 
-_See code: [src/commands/bourne/export.ts](https://github.com/realestate-com-au/json-bourne-sfdx-cli/blob/v0.1.1/src/commands/bourne/export.ts)_
+_See code: [src/commands/bourne/export.ts](https://github.com/realestate-com-au/json-bourne-sfdx-cli/blob/v0.1.1-217/src/commands/bourne/export.ts)_
 
 ## `json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
 
 Imports records from the object specified.
 
 ```
+Imports records from the object specified.
+
 USAGE
-  $ json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-u <string>] [--apiversion
+  $ json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-u <string>] [--apiversion 
   <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]
 
 OPTIONS
@@ -241,7 +245,7 @@ EXAMPLE
        Deploying data, please wait.... Deployment completed!
 ```
 
-_See code: [src/commands/bourne/import.ts](https://github.com/realestate-com-au/json-bourne-sfdx-cli/blob/v0.1.1/src/commands/bourne/import.ts)_
+_See code: [src/commands/bourne/import.ts](https://github.com/realestate-com-au/json-bourne-sfdx-cli/blob/v0.1.1-217/src/commands/bourne/import.ts)_
 <!-- commandsstop -->
 
 License
