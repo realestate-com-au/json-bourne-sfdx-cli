@@ -1,13 +1,12 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { sync as resolveSync } from "resolve";
 import * as pathUtils from "path";
-import { DataImportPlugin } from "../types";
 
 export interface PluginLoadOptions {
   tsResolveBaseDir?: string;
 }
 
-export const loadPluginModule = (path: string, opts?: PluginLoadOptions): any => {
+export const loadScriptModule = (path: string, opts?: PluginLoadOptions): any => {
   if (path.endsWith(".ts")) {
     const tsNodeModule = resolveSync("ts-node", {
       basedir: opts?.tsResolveBaseDir || pathUtils.dirname(path),
@@ -42,8 +41,13 @@ export const loadPluginModule = (path: string, opts?: PluginLoadOptions): any =>
   return require(path);
 };
 
-export const loadPlugin = <T>(path: string, opts?: PluginLoadOptions): T => {
-  const module = loadPluginModule(path, opts);
-  // NOTE: currently require the plugin implementation to be the default export
-  return new module();
+export const runScript = async <C = void, R = void>(path: string, context: C, opts?: PluginLoadOptions): Promise<R> => {
+  const scriptModule = loadScriptModule(path, opts);
+  let result;
+  if (typeof scriptModule === 'function') {
+    result = await Promise.resolve(scriptModule(context));
+  } else if (scriptModule.run) {
+    result = await Promise.resolve(scriptModule.run(context));
+  }
+  return result;
 };

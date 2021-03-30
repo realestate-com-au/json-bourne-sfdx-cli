@@ -8,14 +8,16 @@ export interface ObjectDataConfiguration {
   enableMultiThreading?: boolean;
 }
 
-export interface PluginConfiguration {
-    import?: string;
-    export?: string;
+export interface ScriptsConfiguration {
+    preimport?: string[];
+    preimportobject?: string[];
+    postimportobject?: string[];
+    postimport?: string[];
     tsResolveBaseDir?: string;
 }
 
 export interface DataConfiguration {
-  plugin?: PluginConfiguration;
+  scripts?: ScriptsConfiguration;
   tsResolveBaseDir?: string;
   pollTimeout?: number;
   pollBatchSize?: number;
@@ -53,9 +55,13 @@ export interface DataImportResult {
 
 export interface DataImportContext {
   config: DataConfiguration;
+  state: {
+    [key: string]: any
+  }
 }
 
 export interface ObjectDataImportContext extends DataImportContext {
+  sObjectType: string;
   objectConfig: ObjectDataConfiguration;
   records: any[];
 }
@@ -80,17 +86,3 @@ export interface ObjectDataExportContext extends DataExportContext {
 export interface ObjectDataExportResultContext extends ObjectDataExportContext {}
 
 export interface DataExportResultContext extends DataExportContext {}
-
-export interface DataImportPlugin {
-  onBeforeImport(context: DataImportContext): Promise<void>;
-  onBeforeImportObject(context: ObjectDataImportContext): Promise<void>;
-  onAfterImportObject(context: ObjectDataImportResultContext): Promise<void>;
-  onAfterImport(context: DataImportResultContext): Promise<void>;
-}
-
-export interface DataExportPlugin {
-  onBeforeExport(context: DataExportContext): Promise<void>;
-  onBeforeExportObject(context: ObjectDataExportContext): Promise<void>;
-  onAfterExportObject(context: ObjectDataExportResultContext): Promise<void>;
-  onAfterExport(context: DataExportResultContext): Promise<void>;
-}

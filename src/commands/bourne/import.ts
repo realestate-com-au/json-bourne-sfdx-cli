@@ -4,11 +4,20 @@ import { core, flags, SfdxCommand } from "@salesforce/command";
 import { getDataConfig, getObjectsToProcess, messages } from "../../helper/helper";
 import { AnyJson } from "@salesforce/ts-types";
 import * as _ from "lodash";
-import { DataConfiguration, DataImportPlugin, DataImportRequest, DataImportResult, RecordImportResult } from "../../types";
+import {
+  DataConfiguration,
+  DataImportContext,
+  DataImportRequest,
+  DataImportResult,
+  DataImportResultContext,
+  ObjectDataImportContext,
+  ObjectDataImportResultContext,
+  RecordImportResult,
+} from "../../types";
 import * as fs from "fs";
 import * as pathUtils from "path";
 import * as colors from "colors";
-import { loadPlugin } from "../../helper/plugin";
+import { runScript } from "../../helper/script";
 
 export default class Import extends SfdxCommand {
   public static description = messages.getMessage("pushDescription");
@@ -54,18 +63,6 @@ export default class Import extends SfdxCommand {
     return this._dataConfig;
   }
 
-  private _plugin: DataImportPlugin;
-  protected get plugin(): DataImportPlugin {
-    if(this._plugin === undefined) {
-      if(this.dataConfig?.plugin?.import) {
-        this._plugin = loadPlugin<DataImportPlugin>(this.dataConfig.plugin.import, { tsResolveBaseDir: this.dataConfig.plugin.tsResolveBaseDir });
-      } else {
-        this._plugin = null;
-      }
-    }
-    return this._plugin;
-  }
-
   private get objectsToProcess() {
     const sObjects = getObjectsToProcess(this.flags, this.dataConfig);
     return this.flags.remove ? _.uniq(sObjects.reverse()) : sObjects;
@@ -78,6 +75,8 @@ export default class Import extends SfdxCommand {
   private get connection(): core.Connection {
     return this.org.getConnection();
   }
+
+  private importContext: DataImportContext;
 
   private async getRecordTypesByDeveloperName(sObject: string): Promise<{ [developerName: string]: any }> {
     const r = {};
@@ -204,24 +203,38 @@ export default class Import extends SfdxCommand {
     };
   }
 
-  private async onBeforeImportObject(sObjectType: string, records: any[]) {
-    if(this.plugin) {
-      this.plugin.onBeforeImportObject({
-        config: this.dataConfig,
+  private async preImportObject(sObjectType: string, records: any[]) {
+    const preImportObjectScripts = this.dataConfig?.scripts?.postimport;
+    if (preImportObjectScripts && preImportObjectScripts.length > 0) {
+      const context: ObjectDataImportContext = {
+        ...this.importContext,
+        sObjectType,
         objectConfig: this.dataConfig[sObjectType],
         records,
-      })
+      };
+      for (const postImportScript of preImportObjectScripts) {
+        await runScript<ObjectDataImportContext>(postImportScript, context, {
+          tsResolveBaseDir: this.dataConfig.tsResolveBaseDir,
+        });
+      }
     }
   }
 
-  private async onAfterImportObject(sObjectType: string, records: any[], result: DataImportResult) {
-    if(this.plugin) {
-      this.plugin.onAfterImportObject({
-        config: this.dataConfig,
+  private async postImportObject(sObjectType: string, records: any[], result: DataImportResult) {
+    const postImportObjectScripts = this.dataConfig?.scripts?.postimport;
+    if (postImportObjectScripts && postImportObjectScripts.length > 0) {
+      const context: ObjectDataImportResultContext = {
+        ...this.importContext,
+        sObjectType,
         objectConfig: this.dataConfig[sObjectType],
         records,
         result
-      });
+      };
+      for (const postImportScript of postImportObjectScripts) {
+        await runScript<ObjectDataImportResultContext>(postImportScript, context, {
+          tsResolveBaseDir: this.dataConfig.tsResolveBaseDir,
+        });
+      }
     }
   }
 
@@ -232,7 +245,7 @@ export default class Import extends SfdxCommand {
       return;
     }
 
-    await this.onBeforeImportObject(sObjectType, records);
+    await this.preImportObject(sObjectType, records);
 
     let retries = 0;
     let importResult: DataImportResult;
@@ -257,25 +270,41 @@ export default class Import extends SfdxCommand {
       throw `Import was unsuccessful after ${this.dataConfig.importRetries} attempts`;
     }
 
-    await this.onAfterImportObject(sObjectType, records, importResult);
+    await this.postImportObject(sObjectType, records, importResult);
 
     return importResult;
   }
 
-  private async onBeforeImport() {
-    if(this.plugin) {
-      await this.plugin.onBeforeImport({ config: this.dataConfig });
+  private async preImport(): Promise<void> {
+    const preImportScripts = this.dataConfig?.scripts?.preimport;
+    if (preImportScripts && preImportScripts.length > 0) {
+      for (const preImportScript of preImportScripts) {
+        await runScript<DataImportContext>(preImportScript, this.importContext, {
+          tsResolveBaseDir: this.dataConfig.tsResolveBaseDir,
+        });
+      }
     }
   }
 
-  private async onAfterImport(allResults: DataImportResult[]) {
-    if(this.plugin) {
-      await this.plugin.onAfterImport({ config: this.dataConfig, allResults });
+  private async postImport(allResults: DataImportResult[]): Promise<void> {
+    const postImportScripts = this.dataConfig?.scripts?.postimport;
+    if (postImportScripts && postImportScripts.length > 0) {
+      const context = { ...this.importContext, allResults };
+      for (const postImportScript of postImportScripts) {
+        await runScript<DataImportResultContext>(postImportScript, context, {
+          tsResolveBaseDir: this.dataConfig.tsResolveBaseDir,
+        });
+      }
     }
   }
 
   public async run(): Promise<AnyJson> {
-    await this.onBeforeImport();
+    this.importContext = {
+      config: this.dataConfig,
+      state: {},
+    };
+
+    await this.preImport();
 
     const sObjects = this.objectsToProcess;
     const allResults: DataImportResult[] = [];
@@ -284,7 +313,9 @@ export default class Import extends SfdxCommand {
       allResults.push(await this.importRecordsForObject(sObject));
     }
 
-    await this.onAfterImport(allResults);
+    await this.postImport(allResults);
+
+    delete this.importContext;
 
     return allResults as any;
   }
