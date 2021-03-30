@@ -4,7 +4,7 @@ import { core, flags, SfdxCommand } from "@salesforce/command";
 import { getDataConfig, getObjectsToProcess, messages } from "../../helper/helper";
 import { AnyJson } from "@salesforce/ts-types";
 import * as _ from "lodash";
-import { DataConfiguration, DataImportContext, DataImportPlugin, DataImportRequest, DataImportResult, RecordImportResult } from "../../types";
+import { DataConfiguration, DataImportPlugin, DataImportRequest, DataImportResult, RecordImportResult } from "../../types";
 import * as fs from "fs";
 import * as pathUtils from "path";
 import * as colors from "colors";
@@ -204,12 +204,35 @@ export default class Import extends SfdxCommand {
     };
   }
 
+  private async onBeforeImportObject(sObjectType: string, records: any[]) {
+    if(this.plugin) {
+      this.plugin.onBeforeImportObject({
+        config: this.dataConfig,
+        objectConfig: this.dataConfig[sObjectType],
+        records,
+      })
+    }
+  }
+
+  private async onAfterImportObject(sObjectType: string, records: any[], result: DataImportResult) {
+    if(this.plugin) {
+      this.plugin.onAfterImportObject({
+        config: this.dataConfig,
+        objectConfig: this.dataConfig[sObjectType],
+        records,
+        result
+      });
+    }
+  }
+
   private async importRecordsForObject(sObjectType: string): Promise<DataImportResult> {
     const records = await this.readRecords(sObjectType);
 
     if (!records || records.length === 0) {
       return;
     }
+
+    await this.onBeforeImportObject(sObjectType, records);
 
     let retries = 0;
     let importResult: DataImportResult;
@@ -234,6 +257,8 @@ export default class Import extends SfdxCommand {
       throw `Import was unsuccessful after ${this.dataConfig.importRetries} attempts`;
     }
 
+    await this.onAfterImportObject(sObjectType, records, importResult);
+
     return importResult;
   }
 
@@ -251,7 +276,7 @@ export default class Import extends SfdxCommand {
 
   public async run(): Promise<AnyJson> {
     await this.onBeforeImport();
-    
+
     const sObjects = this.objectsToProcess;
     const allResults: DataImportResult[] = [];
 

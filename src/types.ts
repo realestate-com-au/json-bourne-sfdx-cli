@@ -84,7 +84,7 @@ export interface DataExportResultContext extends DataExportContext {}
 export interface DataImportPlugin {
   onBeforeImport(context: DataImportContext): Promise<void>;
   onBeforeImportObject(context: ObjectDataImportContext): Promise<void>;
-  onAfterImportRecords(context: ObjectDataImportResultContext): Promise<void>;
+  onAfterImportObject(context: ObjectDataImportResultContext): Promise<void>;
   onAfterImport(context: DataImportResultContext): Promise<void>;
 }
 
