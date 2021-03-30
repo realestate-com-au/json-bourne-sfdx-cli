@@ -1,5 +1,5 @@
 import { flags, SfdxCommand, core } from "@salesforce/command";
-import { Helper } from "../../helper/Helper";
+import { Helper } from "../../helper/helper";
 import { AnyJson } from "@salesforce/ts-types";
 import * as _ from "lodash";
 

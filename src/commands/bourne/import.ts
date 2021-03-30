@@ -1,16 +1,17 @@
 /* eslint-disable no-prototype-builtins */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { core, flags, SfdxCommand } from "@salesforce/command";
-import { Connection } from "jsforce";
-import { Helper } from "../../helper/Helper";
-import { ImportResult } from "../../helper/ImportResult";
-import { CPQDataImportRequest } from "../../model/CPQDataImportRequest";
+import { getDataConfig, getObjectsToProcess, messages } from "../../helper/helper";
 import { AnyJson } from "@salesforce/ts-types";
 import * as _ from "lodash";
-import { runScript } from "../../helper/script";
+import { DataConfiguration, DataImportContext, DataImportPlugin, DataImportRequest, DataImportResult, RecordImportResult } from "../../types";
+import * as fs from "fs";
+import * as pathUtils from "path";
+import * as colors from "colors";
+import { loadPlugin } from "../../helper/plugin";
 
 export default class Import extends SfdxCommand {
-  public static description = Helper.messages.getMessage("pushDescription");
+  public static description = messages.getMessage("pushDescription");
 
   public static examples = [
     `$ sfdx bourne:import -o Product2 -u myOrg -c config/cpq-cli-def.json
@@ -21,23 +22,23 @@ export default class Import extends SfdxCommand {
   protected static flagsConfig: any = {
     object: flags.string({
       char: "o",
-      description: Helper.messages.getMessage("objectDescription"),
+      description: messages.getMessage("objectDescription"),
     }),
     configfile: flags.string({
       char: "c",
-      description: Helper.messages.getMessage("configFileDescription"),
+      description: messages.getMessage("configFileDescription"),
     }),
     processall: flags.boolean({
       char: "a",
-      description: Helper.messages.getMessage("pushAllDescription"),
+      description: messages.getMessage("pushAllDescription"),
     }),
     datadir: flags.string({
       char: "d",
-      description: Helper.messages.getMessage("pathToDataDir"),
+      description: messages.getMessage("pathToDataDir"),
     }),
     remove: flags.boolean({
       char: "r",
-      description: Helper.messages.getMessage("removeObjects"),
+      description: messages.getMessage("removeObjects"),
     }),
   };
 
@@ -45,223 +46,221 @@ export default class Import extends SfdxCommand {
 
   protected static requiresUsername = true;
 
-  protected static config;
-
-  protected connection;
-
-  private objectsToProcess() {
-    const sObjects = Helper.getObjectsToProcess(this.flags, Import.config);
-    return this.flags.remove === true ? _.uniq(sObjects.reverse()) : sObjects;
+  private _dataConfig: DataConfiguration;
+  protected get dataConfig(): DataConfiguration {
+    if (!this._dataConfig) {
+      this._dataConfig = getDataConfig(this.flags);
+    }
+    return this._dataConfig;
   }
 
-  private getDataDir() {
+  private _plugin: DataImportPlugin;
+  protected get plugin(): DataImportPlugin {
+    if(this._plugin === undefined) {
+      if(this.dataConfig?.plugin?.import) {
+        this._plugin = loadPlugin<DataImportPlugin>(this.dataConfig.plugin.import, { tsResolveBaseDir: this.dataConfig.plugin.tsResolveBaseDir });
+      } else {
+        this._plugin = null;
+      }
+    }
+    return this._plugin;
+  }
+
+  private get objectsToProcess() {
+    const sObjects = getObjectsToProcess(this.flags, this.dataConfig);
+    return this.flags.remove ? _.uniq(sObjects.reverse()) : sObjects;
+  }
+
+  private get dataDir(): string {
     return this.flags.datadir ? this.flags.datadir : "data";
   }
 
-  private async getRecordTypeRef(sObject, configObject) {
-    const recordTypeRef = {};
-    if (configObject.hasRecordTypes) {
-      this.ux.log(Helper.colors.blue("Aligning RecordType IDs..."));
-      this.ux.startSpinner("Processing");
-      const recordTypes: any = await this.connection.query(
-        `SELECT Id, Name, DeveloperName FROM RecordType WHERE sObjectType ='${sObject}'`
-      );
-      if (recordTypes && recordTypes.records.length > 0) {
-        recordTypes.records.forEach((recordType) => {
-          recordTypeRef[recordType.DeveloperName] = recordType.Id;
-        });
-      }
-      this.ux.stopSpinner("RecordType information retrieved");
-    }
-    return recordTypeRef;
+  private get connection(): core.Connection {
+    return this.org.getConnection();
   }
 
-  private readRecords(configObject: any) {
-    const dirPath = this.getDataDir() + "/" + configObject.directory;
-    if (Helper.fs.existsSync(dirPath)) {
-      const files = Helper.fs.readdirSync(dirPath);
-      return files.map((file) => {
-        const filePath = dirPath + "/" + file;
-        try {
-          return Helper.fs.readFileSync(filePath, "utf8");
-        } catch (e) {
-          console.error(Helper.colors.red("Could not load " + filePath));
-        }
-        return;
+  private async getRecordTypesByDeveloperName(sObject: string): Promise<{ [developerName: string]: any }> {
+    const r = {};
+    this.ux.startSpinner("Retrieving Record Type Information");
+    const queryResult = await this.connection.query<any>(
+      `SELECT Id, Name, DeveloperName FROM RecordType WHERE sObjectType = '${sObject}'`
+    );
+    if (queryResult?.records && queryResult.records.length > 0) {
+      queryResult.records.forEach((recordType) => {
+        r[recordType.DeveloperName] = recordType;
       });
+    }
+
+    this.ux.stopSpinner("RecordType information retrieved");
+    return r;
+  }
+
+  private readRecord(recordPath: string, recordTypes: { [developerName: string]: any }): any {
+    let record;
+    try {
+      record = JSON.parse(fs.readFileSync(recordPath, { encoding: "utf8" }));
+    } catch (e) {
+      this.ux.error(`Cound not load record from file: ${recordPath}`);
+      return;
+    }
+
+    if (recordTypes) {
+      const recordTypeId = recordTypes?.[record.RecordType?.DeveloperName]?.Id;
+      if (recordTypeId) {
+        record.RecordTypeId = recordTypeId;
+        delete record.RecordType;
+      } else if (record.RecordType) {
+        this.ux.log("This record does not contain a value for Record Type, skipping transformation.");
+      } else {
+        throw new core.SfdxError("Record Type not found for " + record.RecordType.DeveloperName);
+      }
+    }
+  }
+
+  private async readRecords(sObjectType: string): Promise<any[]> {
+    const objectConfig = this.dataConfig[sObjectType];
+    if (objectConfig) {
+      const objectDirPath = pathUtils.join(this.dataDir, objectConfig.directory);
+      if (fs.existsSync(objectDirPath)) {
+        const files = fs.readdirSync(objectDirPath);
+        if (files.length > 0) {
+          let recordTypes;
+          if (objectConfig.hasRecordTypes) {
+            recordTypes = await this.getRecordTypesByDeveloperName(sObjectType);
+          }
+          return files.map((file) => {
+            return this.readRecord(pathUtils.join(objectDirPath, file), recordTypes);
+          });
+        }
+      }
     }
     return [];
   }
 
-  private resolveToSObjects(recordTypeRef: any, configObject: any, originalRecords: any[]) {
-    return originalRecords.map((original) => {
-      const record = JSON.parse(original);
-      if (configObject.hasRecordTypes && recordTypeRef) {
-        if (recordTypeRef.hasOwnProperty(record.RecordType.DeveloperName)) {
-          record.RecordTypeId = recordTypeRef[record.RecordType.DeveloperName];
-          delete record.RecordType;
-        } else if (record.RecordType) {
-          this.ux.log("This record does not contain a value for Record Type, skipping transformation.");
-        } else {
-          throw new core.SfdxError("Record Type not found for " + record.RecordType.DeveloperName);
-        }
-      }
-      return record;
-    });
-  }
-
-  private createPayload(records, configObject, sObject, payloads: Array<CPQDataImportRequest>) {
+  private buildRequests(records: any[], sObjectType: string, payloads: DataImportRequest[]) {
     const payload = JSON.stringify(records, null, 0);
-    if (payload.length > Import.config.payloadLength) {
+    if (payload.length > this.dataConfig.payloadLength) {
       const splitRecords = Import.splitInHalf(records);
-      this.createPayload(splitRecords[0], configObject, sObject, payloads);
-      this.createPayload(splitRecords[1], configObject, sObject, payloads);
+      this.buildRequests(splitRecords[0], sObjectType, payloads);
+      this.buildRequests(splitRecords[1], sObjectType, payloads);
     } else {
-      const operation = this.flags.remove === true ? "delete" : "upsert";
-      const dataImportObj: CPQDataImportRequest = new CPQDataImportRequest(
-        sObject,
-        operation,
-        records,
-        configObject.externalid
-      );
-      payloads.push(dataImportObj);
+      payloads.push({
+        extIdField: this.dataConfig?.objects?.[sObjectType].externalid,
+        operation: this.flags.remove ? "delete" : "upsert",
+        payload: records,
+        sObjectType: sObjectType,
+      });
     }
   }
 
-  private static splitInHalf(records) {
-    const halfSize = records.length / 2;
+  private static splitInHalf(records: any[]): any[][] {
+    const halfSize = Math.floor(records.length / 2);
     const splitRecords = [];
     splitRecords.push(records.slice(0, halfSize));
     splitRecords.push(records.slice(halfSize));
     return splitRecords;
   }
 
-  private getProcessPayload(isManagedPackage) {
-    const restUrl = isManagedPackage == true ? "/JSON/bourne/v1" : "/bourne/v1";
-    return async (payload, connection) => {
-      try {
-        return connection.apex.post(restUrl, payload);
-      } catch (error) {
-        this.ux.log(error);
-        throw error;
-      }
-    };
-  }
+  private _requestHandler = async (request: DataImportRequest): Promise<RecordImportResult[]> => {
+    const restUrl = this.dataConfig.useManagedPackage ? "/JSON/bourne/v1" : "/bourne/v1";
+    try {
+      const resultJSON = await this.connection.apex.post<string>(restUrl, request);
+      return JSON.parse(resultJSON);
+    } catch (error) {
+      this.ux.log(error);
+      throw error;
+    }
+  };
 
-  private async importRecords(
-    records: any[],
-    configObject: any,
-    sObject: any,
-    connection: Connection,
-    useManagedPackage: boolean
-  ) {
-    let responses = [];
+  private async importRecords(records: any[], sObjectType: string): Promise<DataImportResult> {
+    const results: RecordImportResult[] = [];
     if (records.length > 0) {
-      const payloads = [];
-      this.createPayload(records, configObject, sObject, payloads);
-      const processPayload = this.getProcessPayload(useManagedPackage);
-      if (configObject.enableMultiThreading) {
-        const promises = [];
-        payloads.forEach((payload) => promises.push(processPayload(payload, connection)));
-        responses = await Promise.all(promises);
+      const resultsHandler = (items: RecordImportResult[]) => {
+        if (items) {
+          items.forEach((item) => results.push(item));
+        }
+      };
+      const requests: DataImportRequest[] = [];
+      this.buildRequests(records, sObjectType, requests);
+      if (this.dataConfig[sObjectType]?.enableMultiThreading) {
+        const promises = requests.map(this._requestHandler);
+        const promiseResults: RecordImportResult[][] = await Promise.all(promises);
+        promiseResults.forEach(resultsHandler);
       } else {
-        for (const i in payloads) {
-          const promises = [];
-          promises.push(processPayload(payloads[i], connection));
-          responses.push(await Promise.all(promises));
+        for (const request of requests) {
+          resultsHandler(await this._requestHandler(request));
         }
       }
     }
-    return responses;
+    const failureResults = results.filter((result) => result.result === "FAILED");
+    return {
+      sObjectType,
+      records,
+      results,
+      total: results.length,
+      failureResults,
+      failure: failureResults.length,
+      success: results.length - failureResults.length,
+    };
+  }
+
+  private async importRecordsForObject(sObjectType: string): Promise<DataImportResult> {
+    const records = await this.readRecords(sObjectType);
+
+    if (!records || records.length === 0) {
+      return;
+    }
+
+    let retries = 0;
+    let importResult: DataImportResult;
+
+    while (retries < this.dataConfig.importRetries) {
+      if (retries > 0) {
+        this.ux.log(`Retrying ${colors.blue(sObjectType)} import...`);
+      } else {
+        this.ux.log(`Importing ${colors.blue(sObjectType)} records`);
+      }
+
+      const importResult = await this.importRecords(records, sObjectType);
+
+      if (importResult.failure === 0) {
+        break;
+      }
+
+      retries++;
+    }
+
+    if (importResult.failure > 0) {
+      throw `Import was unsuccessful after ${this.dataConfig.importRetries} attempts`;
+    }
+
+    return importResult;
+  }
+
+  private async onBeforeImport() {
+    if(this.plugin) {
+      await this.plugin.onBeforeImport({ config: this.dataConfig });
+    }
+  }
+
+  private async onAfterImport(allResults: DataImportResult[]) {
+    if(this.plugin) {
+      await this.plugin.onAfterImport({ config: this.dataConfig, allResults });
+    }
   }
 
   public async run(): Promise<AnyJson> {
-    this.connection = this.org.getConnection();
-    Import.config = Helper.initConfig(this.flags);
-    const sObjects = this.objectsToProcess();
-    const allImportResults: ImportResult[] = [];
+    await this.onBeforeImport();
+    
+    const sObjects = this.objectsToProcess;
+    const allResults: DataImportResult[] = [];
 
-    const tsNodeResolveBaseDir = Import.config.scripts?.tsNodeResolveBaseDir;
-
-    const importContext = {
-      config: Import.config,
-      sObjects,
-    };
-
-    // global pre and post import script paths
-    const preImportScriptPath = Import.config?.scripts?.preimport;
-    const postImportScriptPath = Import.config?.scripts?.preimport;
-    if (preImportScriptPath) {
-      await runScript({ path: preImportScriptPath, context: importContext, tsNodeResolveBaseDir });
+    for (const sObject of sObjects) {
+      allResults.push(await this.importRecordsForObject(sObject));
     }
 
-    for (const i in sObjects) {
-      let success = false;
-      let retries = 0;
-      do {
-        const sObject = sObjects[i];
-        const configObject = Import.config.objects[sObject];
-        const recordTypeRef = await this.getRecordTypeRef(sObject, configObject);
-        const originalRecords = this.readRecords(configObject);
-        const records = this.resolveToSObjects(recordTypeRef, configObject, originalRecords);
+    await this.onAfterImport(allResults);
 
-        // object level pre and post import
-        const preImportObjectScriptPath = configObject?.scripts?.preimport;
-        const postImportObjectScriptPath = configObject?.scripts?.postimport;
-        const objectContext = {
-          importContext,
-          sObject,
-          config: configObject,
-          recordTypeRef,
-          records,
-          flags: this.flags,
-          commandId: this.id,
-        };
-        if (preImportObjectScriptPath) {
-          await runScript({ path: preImportObjectScriptPath, context: objectContext, tsNodeResolveBaseDir });
-        }
-
-        this.ux.log("Deploying " + Helper.colors.blue(sObject) + " records");
-
-        const responses = await this.importRecords(
-          records,
-          configObject,
-          sObject,
-          this.connection,
-          Import.config.useManagedPackage
-        );
-
-        const importResult = new ImportResult(responses);
-        if (postImportObjectScriptPath) {
-          await runScript({
-            path: postImportObjectScriptPath,
-            context: { ...objectContext, result: importResult },
-            tsNodeResolveBaseDir,
-          });
-        }
-
-        importResult.print();
-        allImportResults.push(importResult);
-
-        if (importResult.failure == 0) {
-          success = true;
-        } else if (retries + 1 == Import.config.importRetries) {
-          throw "Import was unsuccessful after " + Import.config.importRetries + " attempts.";
-        } else {
-          this.ux.log("Retrying...");
-          retries++;
-        }
-      } while (success == false && retries < Import.config.importRetries);
-    }
-
-    if (postImportScriptPath) {
-      await runScript({
-        path: preImportScriptPath,
-        context: { ...importContext, allImportResults },
-        tsNodeResolveBaseDir,
-      });
-    }
-
-    return JSON.stringify(allImportResults);
+    return allResults as any;
   }
 }
