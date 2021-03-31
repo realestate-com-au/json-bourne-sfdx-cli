@@ -1,23 +1,29 @@
-/* eslint-disable no-prototype-builtins */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { core, flags, SfdxCommand } from "@salesforce/command";
-import { getDataConfig, getObjectsToProcess, messages } from "../../helper/helper";
+import { flags, SfdxCommand } from "@salesforce/command";
+import { Messages, SfdxError } from "@salesforce/core";
+import { getDataConfig, getObjectsToProcess } from "../../helper/helper";
 import { AnyJson } from "@salesforce/ts-types";
 import * as _ from "lodash";
 import {
-  DataConfiguration,
-  DataImportContext,
-  DataImportRequest,
-  DataImportResult,
-  DataImportResultContext,
-  ObjectDataImportContext,
-  ObjectDataImportResultContext,
+  Config,
+  Context,
+  RecordContext,
+  ImportRequest,
+  ImportResult,
+  PostImportObjectContext,
   RecordImportResult,
+  PostImportContext,
+  PreImportContext,
+  PreImportObjectContext,
 } from "../../types";
 import * as fs from "fs";
 import * as pathUtils from "path";
 import * as colors from "colors";
 import { runScript } from "../../helper/script";
+import { Record } from "jsforce";
+
+Messages.importMessagesDirectory(__dirname);
+
+const messages = Messages.loadMessages("json-bourne-sfdx", "org");
 
 export default class Import extends SfdxCommand {
   public static description = messages.getMessage("pushDescription");
@@ -28,7 +34,7 @@ export default class Import extends SfdxCommand {
     `,
   ];
 
-  protected static flagsConfig: any = {
+  protected static flagsConfig = {
     object: flags.string({
       char: "o",
       description: messages.getMessage("objectDescription"),
@@ -55,8 +61,8 @@ export default class Import extends SfdxCommand {
 
   protected static requiresUsername = true;
 
-  private _dataConfig: DataConfiguration;
-  protected get dataConfig(): DataConfiguration {
+  private _dataConfig: Config;
+  protected get dataConfig(): Config {
     if (!this._dataConfig) {
       this._dataConfig = getDataConfig(this.flags);
     }
@@ -72,16 +78,12 @@ export default class Import extends SfdxCommand {
     return this.flags.datadir ? this.flags.datadir : "data";
   }
 
-  private get connection(): core.Connection {
-    return this.org.getConnection();
-  }
+  private context: Context;
 
-  private importContext: DataImportContext;
-
-  private async getRecordTypesByDeveloperName(sObject: string): Promise<{ [developerName: string]: any }> {
+  private async getRecordTypesByDeveloperName(sObject: string): Promise<{ [developerName: string]: Record }> {
     const r = {};
     this.ux.startSpinner("Retrieving Record Type Information");
-    const queryResult = await this.connection.query<any>(
+    const queryResult = await this.org.getConnection().query<Record>(
       `SELECT Id, Name, DeveloperName FROM RecordType WHERE sObjectType = '${sObject}'`
     );
     if (queryResult?.records && queryResult.records.length > 0) {
@@ -94,8 +96,8 @@ export default class Import extends SfdxCommand {
     return r;
   }
 
-  private readRecord(recordPath: string, recordTypes: { [developerName: string]: any }): any {
-    let record;
+  private readRecord(recordPath: string, recordTypes: { [developerName: string]: Record }): Record {
+    let record: Record;
     try {
       record = JSON.parse(fs.readFileSync(recordPath, { encoding: "utf8" }));
     } catch (e) {
@@ -111,12 +113,12 @@ export default class Import extends SfdxCommand {
       } else if (record.RecordType) {
         this.ux.log("This record does not contain a value for Record Type, skipping transformation.");
       } else {
-        throw new core.SfdxError("Record Type not found for " + record.RecordType.DeveloperName);
+        throw new SfdxError("Record Type not found for " + record.RecordType.DeveloperName);
       }
     }
   }
 
-  private async readRecords(sObjectType: string): Promise<any[]> {
+  private async readRecords(sObjectType: string): Promise<Record[]> {
     const objectConfig = this.dataConfig[sObjectType];
     if (objectConfig) {
       const objectDirPath = pathUtils.join(this.dataDir, objectConfig.directory);
@@ -136,7 +138,7 @@ export default class Import extends SfdxCommand {
     return [];
   }
 
-  private buildRequests(records: any[], sObjectType: string, payloads: DataImportRequest[]) {
+  private buildRequests(records: Record[], sObjectType: string, payloads: ImportRequest[]) {
     const payload = JSON.stringify(records, null, 0);
     if (payload.length > this.dataConfig.payloadLength) {
       const splitRecords = Import.splitInHalf(records);
@@ -152,7 +154,7 @@ export default class Import extends SfdxCommand {
     }
   }
 
-  private static splitInHalf(records: any[]): any[][] {
+  private static splitInHalf(records: Record[]): Record[][] {
     const halfSize = Math.floor(records.length / 2);
     const splitRecords = [];
     splitRecords.push(records.slice(0, halfSize));
@@ -160,10 +162,10 @@ export default class Import extends SfdxCommand {
     return splitRecords;
   }
 
-  private _requestHandler = async (request: DataImportRequest): Promise<RecordImportResult[]> => {
+  private _requestHandler = async (request: ImportRequest): Promise<RecordImportResult[]> => {
     const restUrl = this.dataConfig.useManagedPackage ? "/JSON/bourne/v1" : "/bourne/v1";
     try {
-      const resultJSON = await this.connection.apex.post<string>(restUrl, request);
+      const resultJSON = await this.org.getConnection().apex.post<string>(restUrl, request);
       return JSON.parse(resultJSON);
     } catch (error) {
       this.ux.log(error);
@@ -171,7 +173,7 @@ export default class Import extends SfdxCommand {
     }
   };
 
-  private async importRecords(records: any[], sObjectType: string): Promise<DataImportResult> {
+  private async importRecords(records: Record[], sObjectType: string): Promise<ImportResult> {
     const results: RecordImportResult[] = [];
     if (records.length > 0) {
       const resultsHandler = (items: RecordImportResult[]) => {
@@ -179,7 +181,7 @@ export default class Import extends SfdxCommand {
           items.forEach((item) => results.push(item));
         }
       };
-      const requests: DataImportRequest[] = [];
+      const requests: ImportRequest[] = [];
       this.buildRequests(records, sObjectType, requests);
       if (this.dataConfig[sObjectType]?.enableMultiThreading) {
         const promises = requests.map(this._requestHandler);
@@ -203,42 +205,40 @@ export default class Import extends SfdxCommand {
     };
   }
 
-  private async preImportObject(sObjectType: string, records: any[]) {
-    const preImportObjectScripts = this.dataConfig?.scripts?.postimport;
-    if (preImportObjectScripts && preImportObjectScripts.length > 0) {
-      const context: ObjectDataImportContext = {
-        ...this.importContext,
+  private async preImportObject(sObjectType: string, records: Record[]) {
+    const scriptPath = this.dataConfig?.script?.preimportobject;
+    if (scriptPath) {
+      const context: PreImportObjectContext = {
+        ...this.context,
         sObjectType,
         objectConfig: this.dataConfig[sObjectType],
         records,
       };
-      for (const postImportScript of preImportObjectScripts) {
-        await runScript<ObjectDataImportContext>(postImportScript, context, {
-          tsResolveBaseDir: this.dataConfig.tsResolveBaseDir,
-        });
-      }
+
+      await runScript<RecordContext>(scriptPath, context, {
+        tsResolveBaseDir: this.dataConfig.script.tsResolveBaseDir,
+      });
     }
   }
 
-  private async postImportObject(sObjectType: string, records: any[], result: DataImportResult) {
-    const postImportObjectScripts = this.dataConfig?.scripts?.postimport;
-    if (postImportObjectScripts && postImportObjectScripts.length > 0) {
-      const context: ObjectDataImportResultContext = {
-        ...this.importContext,
+  private async postImportObject(sObjectType: string, records: Record[], importResult: ImportResult) {
+    const scriptPath = this.dataConfig?.script?.postimportobject;
+    if (scriptPath) {
+      const context: PostImportObjectContext = {
+        ...this.context,
         sObjectType,
         objectConfig: this.dataConfig[sObjectType],
         records,
-        result
+        importResult,
       };
-      for (const postImportScript of postImportObjectScripts) {
-        await runScript<ObjectDataImportResultContext>(postImportScript, context, {
-          tsResolveBaseDir: this.dataConfig.tsResolveBaseDir,
-        });
-      }
+
+      await runScript<PostImportObjectContext>(scriptPath, context, {
+        tsResolveBaseDir: this.dataConfig.script.tsResolveBaseDir,
+      });
     }
   }
 
-  private async importRecordsForObject(sObjectType: string): Promise<DataImportResult> {
+  private async importRecordsForObject(sObjectType: string): Promise<ImportResult> {
     const records = await this.readRecords(sObjectType);
 
     if (!records || records.length === 0) {
@@ -248,7 +248,7 @@ export default class Import extends SfdxCommand {
     await this.preImportObject(sObjectType, records);
 
     let retries = 0;
-    let importResult: DataImportResult;
+    let importResult: ImportResult;
 
     while (retries < this.dataConfig.importRetries) {
       if (retries > 0) {
@@ -276,30 +276,38 @@ export default class Import extends SfdxCommand {
   }
 
   private async preImport(): Promise<void> {
-    const preImportScripts = this.dataConfig?.scripts?.preimport;
-    if (preImportScripts && preImportScripts.length > 0) {
-      for (const preImportScript of preImportScripts) {
-        await runScript<DataImportContext>(preImportScript, this.importContext, {
-          tsResolveBaseDir: this.dataConfig.tsResolveBaseDir,
-        });
-      }
+    const scriptPath = this.dataConfig?.script?.preimport;
+    if (scriptPath) {
+      await runScript<PreImportContext>(scriptPath, this.context, {
+        tsResolveBaseDir: this.dataConfig.script.tsResolveBaseDir,
+      });
     }
   }
 
-  private async postImport(allResults: DataImportResult[]): Promise<void> {
-    const postImportScripts = this.dataConfig?.scripts?.postimport;
-    if (postImportScripts && postImportScripts.length > 0) {
-      const context = { ...this.importContext, allResults };
-      for (const postImportScript of postImportScripts) {
-        await runScript<DataImportResultContext>(postImportScript, context, {
-          tsResolveBaseDir: this.dataConfig.tsResolveBaseDir,
-        });
-      }
+  private async postImport(results: ImportResult[]): Promise<void> {
+    const scriptPath = this.dataConfig?.script?.postimport;
+    if (scriptPath) {
+      const context: PostImportContext = { ...this.context, results };
+      await runScript<PostImportContext>(scriptPath, context, {
+        tsResolveBaseDir: this.dataConfig.script.tsResolveBaseDir,
+      });
     }
   }
 
   public async run(): Promise<AnyJson> {
-    this.importContext = {
+    this.context = {
+      command: {
+        args: this.args,
+        configAggregator: this.configAggregator,
+        flags: this.flags,
+        logger: this.logger,
+        ux: this.ux,
+        hubOrg: this.hubOrg,
+        org: this.org,
+        project: this.project,
+        varargs: this.varargs,
+        result: this.result,
+      },
       config: this.dataConfig,
       state: {},
     };
@@ -307,7 +315,7 @@ export default class Import extends SfdxCommand {
     await this.preImport();
 
     const sObjects = this.objectsToProcess;
-    const allResults: DataImportResult[] = [];
+    const allResults: ImportResult[] = [];
 
     for (const sObject of sObjects) {
       allResults.push(await this.importRecordsForObject(sObject));
@@ -315,7 +323,7 @@ export default class Import extends SfdxCommand {
 
     await this.postImport(allResults);
 
-    delete this.importContext;
+    delete this.context;
 
     return allResults as any;
   }

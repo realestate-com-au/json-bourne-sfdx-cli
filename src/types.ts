@@ -1,4 +1,10 @@
-export interface ObjectDataConfiguration {
+import { Record } from "jsforce";
+import { ConfigAggregator, Logger, Org, SfdxProject } from '@salesforce/core';
+import { JsonMap } from '@salesforce/ts-types';
+import { OutputArgs, OutputFlags } from '@oclif/parser';
+import { SfdxResult, UX } from '@salesforce/command';
+
+export interface ObjectConfig {
   query?: string;
   externalid?: string;
   directory?: string;
@@ -8,17 +14,25 @@ export interface ObjectDataConfiguration {
   enableMultiThreading?: boolean;
 }
 
-export interface ScriptsConfiguration {
-    preimport?: string[];
-    preimportobject?: string[];
-    postimportobject?: string[];
-    postimport?: string[];
+export interface ObjectConfigEntry {
+  sObjectType: string;
+  objectConfig: ObjectConfig;
+}
+
+export interface ScriptConfig {
+    preimport?: string;
+    preimportobject?: string;
+    postimportobject?: string;
+    postimport?: string;
+    preexport?: string;
+    preexportobject?: string;
+    postexportobject?: string;
+    postexport?: string;
     tsResolveBaseDir?: string;
 }
 
-export interface DataConfiguration {
-  scripts?: ScriptsConfiguration;
-  tsResolveBaseDir?: string;
+export interface Config {
+  script?: ScriptConfig;
   pollTimeout?: number;
   pollBatchSize?: number;
   maxPollCount?: number;
@@ -26,13 +40,13 @@ export interface DataConfiguration {
   importRetries?: number;
   useManagedPackage?: boolean;
   allObjects?: string[];
-  objects?: { [sObject: string]: ObjectDataConfiguration };
+  objects?: { [sObject: string]: ObjectConfig };
 }
 
-export interface DataImportRequest {
+export interface ImportRequest {
   sObjectType: string;
   operation: string;
-  payload: any[];
+  payload: Record[];
   extIdField: string;
 }
 
@@ -43,46 +57,65 @@ export interface RecordImportResult {
   result?: "SUCCESS" | "FAILED";
 }
 
-export interface DataImportResult {
+export interface ImportResult {
   sObjectType: string;
-  records?: any[];
+  records?: Record[];
   results?: RecordImportResult[];
   total?: number;
   failure?: number;
   success?: number;
   failureResults?: RecordImportResult[];
+  [key: string]: unknown;
 }
 
-export interface DataImportContext {
-  config: DataConfiguration;
+export interface CommandContext {
+  logger: Logger;
+  ux: UX;
+  configAggregator: ConfigAggregator;
+  org?: Org;
+  hubOrg?: Org;
+  project?: SfdxProject;
+  flags: OutputFlags<any>;
+  args: OutputArgs<any>;
+  varargs?: JsonMap;
+  result: SfdxResult;
+}
+
+export interface Context {
+  command: CommandContext;
+  config: Config;
   state: {
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
-export interface ObjectDataImportContext extends DataImportContext {
+export type PreImportContext = Context;
+
+export interface RecordContext extends Context, ObjectConfigEntry {
+  records: Record[];
+}
+
+export type PreImportObjectContext = RecordContext;
+
+export interface PostImportObjectContext extends RecordContext {
+  importResult: ImportResult;
+}
+
+export interface PostImportContext extends Context {
+  results: ImportResult[];
+}
+
+export interface ExportResult {
   sObjectType: string;
-  objectConfig: ObjectDataConfiguration;
-  records: any[];
+  records: Record[];
 }
 
-export interface ObjectDataImportResultContext extends ObjectDataImportContext {
-  result: DataImportResult;
+export type PreExportContext = Context;
+
+export interface PreExportObjectContext extends Context, ObjectConfigEntry {}
+
+export type PostExportObjectContext = RecordContext;
+
+export interface PostExportContext extends Context {
+  results: ExportResult[];
 }
-
-export interface DataImportResultContext extends DataImportContext {
-  allResults: DataImportResult[];
-}
-
-export interface DataExportContext {
-  config: DataConfiguration;
-}
-
-export interface ObjectDataExportContext extends DataExportContext {
-  objectConfig: ObjectDataConfiguration;
-  records: any[];
-}
-
-export interface ObjectDataExportResultContext extends ObjectDataExportContext {}
-
-export interface DataExportResultContext extends DataExportContext {}

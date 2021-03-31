@@ -1,10 +1,21 @@
-import { flags, SfdxCommand, core } from "@salesforce/command";
-import { Helper } from "../../helper/helper";
+import { flags, SfdxCommand } from "@salesforce/command";
+import { Messages, SfdxError } from "@salesforce/core";
 import { AnyJson } from "@salesforce/ts-types";
+import { Record } from "jsforce";
 import * as _ from "lodash";
+import { getDataConfig, getObjectsToProcess, removeField } from "../../helper/helper";
+import { Config, Context, ExportResult, PostExportContext, PostExportObjectContext, PreExportContext, PreExportObjectContext } from "../../types";
+import * as pathUtils from "path";
+import * as fs from "fs";
+import * as colors from "colors";
+import { runScript } from "../../helper/script";
+
+Messages.importMessagesDirectory(__dirname);
+
+const messages = Messages.loadMessages("json-bourne-sfdx", "org");
 
 export default class Export extends SfdxCommand {
-  public static description = Helper.messages.getMessage("pullDescription");
+  public static description = messages.getMessage("pullDescription");
 
   public static examples = [
     `$ sfdx bourne:export -o Product2 -u myOrg -c config/cpq-cli-def.json
@@ -14,134 +25,204 @@ export default class Export extends SfdxCommand {
 
   public static args = [{ name: "file" }];
 
-  protected static flagsConfig: any = {
+  protected static flagsConfig = {
     object: flags.string({
       char: "o",
-      description: Helper.messages.getMessage("objectDescription"),
+      description: messages.getMessage("objectDescription"),
     }),
     configfile: flags.string({
       char: "c",
-      description: Helper.messages.getMessage("configFileDescription"),
+      description: messages.getMessage("configFileDescription"),
     }),
     processall: flags.boolean({
       char: "a",
-      description: Helper.messages.getMessage("pullAllDescription"),
+      description: messages.getMessage("pullAllDescription"),
     }),
   };
 
   protected static requiresUsername = true;
 
-  protected static config;
-
-  protected connection;
-
-  private objectsToProcess(): String[] {
-    return _.uniq(Helper.getObjectsToProcess(this.flags, Export.config));
+  private _dataConfig: Config;
+  protected get dataConfig(): Config {
+    if (!this._dataConfig) {
+      this._dataConfig = getDataConfig(this.flags);
+    }
+    return this._dataConfig;
   }
 
-  private exportRecordsToDir(records, sObjectName, dirPath) {
-    let externalIdField = Export.config.objects[sObjectName].externalid;
-    if (records.length > 0 && !records[0].hasOwnProperty(externalIdField)) {
-      throw new core.SfdxError(
+  private get objectsToProcess(): string[] {
+    return _.uniq(getObjectsToProcess(this.flags, this.dataConfig));
+  }
+
+  private context: Context;
+
+  private exportRecordsToDir(records: Record[], sObjectType: string, dirPath: string) {
+    const externalIdField = this.dataConfig[sObjectType].externalid;
+    if (records.length > 0 && !records[0](externalIdField)) {
+      throw new SfdxError(
         "The External Id provided on the configuration file does not exist on the extracted record(s). Please ensure it is included in the object's query."
       );
     }
 
     records.forEach((record) => {
-      Helper.removeField(record, "attributes");
-      this.removeNullFields(record, sObjectName);
+      removeField(record, "attributes");
+      this.removeNullFields(record, sObjectType);
       let fileName = record[externalIdField];
       if (fileName == null) {
-        throw new core.SfdxError(
+        throw new SfdxError(
           "There are records without External Ids. Ensure all records that are extracted have a value for the field specified as the External Id."
         );
       } else {
-        fileName = dirPath + "/" + fileName.replace(/\s+/g, "-") + ".json";
-        Helper.fs.writeFile(
-          fileName,
-          JSON.stringify(record, undefined, 2),
-          function (err) {
-            if (err) {
-              throw err;
-            }
+        fileName = pathUtils.join(dirPath, `${fileName.replace(/\s+/g, "-")}.json`);
+        fs.writeFile(fileName, JSON.stringify(record, undefined, 2), function (err) {
+          if (err) {
+            throw err;
           }
-        );
+        });
       }
     });
   }
 
-  private removeNullFields(record, sObjectName) {
-    Export.config.objects[sObjectName].cleanupFields.forEach((fields) => {
-      if (null === record[fields]) {
-        delete record[fields];
-        let lookupField: string;
-        if (fields.substr(fields.length - 3) == "__r") {
-          lookupField = fields.substr(0, fields.length - 1) + "c";
-        } else {
-          lookupField = fields + "Id";
+  private removeNullFields(record: Record, sObjectType: string) {
+    const cleanupFields = this.dataConfig.objects[sObjectType].cleanupFields;
+    if (cleanupFields) {
+      cleanupFields.forEach((field) => {
+        if (null === record[field]) {
+          delete record[field];
+          let lookupField: string;
+          if (field.substr(field.length - 3) == "__r") {
+            lookupField = field.substr(0, field.length - 1) + "c";
+          } else {
+            lookupField = field + "Id";
+          }
+          record[lookupField] = null;
         }
-        record[lookupField] = null;
-      }
-    });
+      });
+    }
   }
 
-  private async getExportRecords(sObject: any): Promise<any[]> {
-    return new Promise((resolve) => {
-      var records = [];
-      var query = this.connection
-        .query(`${Export.config.objects[sObject].query}`)
-        .on("record", (record) => {
-          records.push(record);
-        })
-        .on("end", () => {
-          this.ux.log("total in database : " + query.totalSize);
-          this.ux.log("total fetched : " + query.totalFetched);
-          resolve(records);
-        })
-        .on("error", (err) => {
-          this.ux.error(err);
-        })
-        .run({ autoFetch: true, maxFetch: 100000 });
-    });
+  private async getExportRecords(sObjectType: string): Promise<Record[]> {
+    const queryResult = await this.org
+      .getConnection()
+      .query<Record>(this.dataConfig.objects[sObjectType].query, { autoFetch: true, maxFetch: 100000 });
+    this.ux.log("total in database : " + queryResult.totalSize);
+    this.ux.log("total fetched : " + (queryResult.records ? queryResult.records.length : 0));
+    return queryResult.records || [];
   }
 
   private clearDirectory(dirPath: string) {
-    if (Helper.fs.existsSync(dirPath)) {
-      Helper.fs.readdirSync(dirPath).forEach((file) => {
-        Helper.fs.unlink(dirPath + "/" + file, (err) => {
+    if (fs.existsSync(dirPath)) {
+      fs.readdirSync(dirPath).forEach((file) => {
+        fs.unlink(dirPath + "/" + file, (err) => {
           if (err) {
             throw err;
           }
         });
       });
     } else {
-      Helper.fs.mkdirSync(dirPath);
+      fs.mkdirSync(dirPath);
+    }
+  }
+
+  private async preExportObject(sObjectType: string) {
+    const scriptPath = this.dataConfig?.script?.preimportobject;
+    if (scriptPath) {
+      const context: PreExportObjectContext = {
+        ...this.context,
+        sObjectType,
+        objectConfig: this.dataConfig[sObjectType],
+      };
+
+      await runScript<PreExportObjectContext>(scriptPath, context, {
+        tsResolveBaseDir: this.dataConfig.script.tsResolveBaseDir,
+      });
+    }
+  }
+
+  private async postExportObject(sObjectType: string, records: Record[]) {
+    const scriptPath = this.dataConfig?.script?.postimportobject;
+    if (scriptPath) {
+      const context: PostExportObjectContext = {
+        ...this.context,
+        sObjectType,
+        objectConfig: this.dataConfig[sObjectType],
+        records,
+      };
+
+      await runScript<PostExportObjectContext>(scriptPath, context, {
+        tsResolveBaseDir: this.dataConfig.script.tsResolveBaseDir,
+      });
+    }
+  }
+
+  private async exportObject(sObjectType: string): Promise<ExportResult> {
+    await this.preExportObject(sObjectType)
+
+    this.ux.startSpinner(`Retrieving ${colors.blue(sObjectType)} records, please wait...`);
+
+    const records: Record[] = await this.getExportRecords(sObjectType);
+    const dirPath = pathUtils.join("data", this.dataConfig[sObjectType].directory);
+    this.clearDirectory(dirPath);
+    this.exportRecordsToDir(records, sObjectType, dirPath);
+
+    await this.postExportObject(sObjectType, records);
+
+    this.ux.stopSpinner(`Request completed! Received ${records.length} records.`);
+
+    return {
+      sObjectType,
+      records
+    };
+  }
+
+  private async preExport(): Promise<void> {
+    const scriptPath = this.dataConfig?.script?.preexport;
+    if (scriptPath) {
+      await runScript<PreExportContext>(scriptPath, this.context, {
+        tsResolveBaseDir: this.dataConfig.script.tsResolveBaseDir,
+      });
+    }
+  }
+
+  private async postExport(results: ExportResult[]): Promise<void> {
+    const scriptPath = this.dataConfig?.script?.postexport;
+    if (scriptPath) {
+      const context: PostExportContext = { ...this.context, results };
+      await runScript<PostExportContext>(scriptPath, context, {
+        tsResolveBaseDir: this.dataConfig.script.tsResolveBaseDir,
+      });
     }
   }
 
   public async run(): Promise<AnyJson> {
-    this.connection = this.org.getConnection();
-    Export.config = Helper.initConfig(this.flags);
+    this.context = {
+      command: {
+        args: this.args,
+        configAggregator: this.configAggregator,
+        flags: this.flags,
+        logger: this.logger,
+        ux: this.ux,
+        hubOrg: this.hubOrg,
+        org: this.org,
+        project: this.project,
+        varargs: this.varargs,
+        result: this.result,
+      },
+      config: this.dataConfig,
+      state: {},
+    };
 
-    let sObjects = this.objectsToProcess();
-    for (let i in sObjects) {
-      let sObjectName = sObjects[i].toString();
+    await this.preExport();
 
-      this.ux.startSpinner(
-        "Retrieving " +
-          Helper.colors.blue(sObjectName) +
-          " records, please wait..."
-      );
+    const sObjectTypes = this.objectsToProcess;
 
-      let records: any[] = await this.getExportRecords(sObjectName);
-      let dirPath = "data/" + Export.config.objects[sObjectName].directory;
-      this.clearDirectory(dirPath);
-      this.exportRecordsToDir(records, sObjectName, dirPath);
-
-      this.ux.stopSpinner(
-        "Request completed! Received " + records.length + " records."
-      );
+    const results: ExportResult[] = [];
+    for (const sObjectType of sObjectTypes) {
+      results.push(await this.exportObject(sObjectType));
     }
-    return {};
+
+    await this.postExport(results);
+
+    return results as any;
   }
 }
