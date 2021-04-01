@@ -75,7 +75,7 @@ export default class Import extends SfdxCommand {
   }
 
   private get dataDir(): string {
-    return this.flags.datadir ? this.flags.datadir : "data";
+    return this.flags.datadir || "data";
   }
 
   private context: Context;
@@ -99,7 +99,7 @@ export default class Import extends SfdxCommand {
   private readRecord(recordPath: string, recordTypes: { [developerName: string]: Record }): Record {
     let record: Record;
     try {
-      record = JSON.parse(fs.readFileSync(recordPath, { encoding: "utf8" }));
+      record = JSON.parse(fs.readFileSync(recordPath, { encoding: 'utf8' }));
     } catch (e) {
       this.ux.error(`Cound not load record from file: ${recordPath}`);
       return;
@@ -116,10 +116,12 @@ export default class Import extends SfdxCommand {
         throw new SfdxError("Record Type not found for " + record.RecordType.DeveloperName);
       }
     }
+
+    return record;
   }
 
   private async readRecords(sObjectType: string): Promise<Record[]> {
-    const objectConfig = this.dataConfig[sObjectType];
+    const objectConfig = this.dataConfig.objects?.[sObjectType];
     if (objectConfig) {
       const objectDirPath = pathUtils.join(this.dataDir, objectConfig.directory);
       if (fs.existsSync(objectDirPath)) {
@@ -165,8 +167,7 @@ export default class Import extends SfdxCommand {
   private _requestHandler = async (request: ImportRequest): Promise<RecordImportResult[]> => {
     const restUrl = this.dataConfig.useManagedPackage ? "/JSON/bourne/v1" : "/bourne/v1";
     try {
-      const resultJSON = await this.org.getConnection().apex.post<string>(restUrl, request);
-      return JSON.parse(resultJSON);
+      return JSON.parse(await this.org.getConnection().apex.post<string>(restUrl, request));
     } catch (error) {
       this.ux.log(error);
       throw error;
@@ -183,7 +184,7 @@ export default class Import extends SfdxCommand {
       };
       const requests: ImportRequest[] = [];
       this.buildRequests(records, sObjectType, requests);
-      if (this.dataConfig[sObjectType]?.enableMultiThreading) {
+      if (this.dataConfig.objects?.[sObjectType]?.enableMultiThreading) {
         const promises = requests.map(this._requestHandler);
         const promiseResults: RecordImportResult[][] = await Promise.all(promises);
         promiseResults.forEach(resultsHandler);
@@ -199,7 +200,7 @@ export default class Import extends SfdxCommand {
       records,
       results,
       total: results.length,
-      failureResults,
+      failureResults: failureResults.length > 0 ? failureResults : undefined,
       failure: failureResults.length,
       success: results.length - failureResults.length,
     };
@@ -211,7 +212,7 @@ export default class Import extends SfdxCommand {
       const context: PreImportObjectContext = {
         ...this.context,
         sObjectType,
-        objectConfig: this.dataConfig[sObjectType],
+        objectConfig: this.dataConfig.objects?.[sObjectType],
         records,
       };
 
@@ -227,7 +228,7 @@ export default class Import extends SfdxCommand {
       const context: PostImportObjectContext = {
         ...this.context,
         sObjectType,
-        objectConfig: this.dataConfig[sObjectType],
+        objectConfig: this.dataConfig.objects?.[sObjectType],
         records,
         importResult,
       };
@@ -245,6 +246,8 @@ export default class Import extends SfdxCommand {
       return;
     }
 
+    this.ux.startSpinner(`Importing ${colors.blue(sObjectType)} records`);
+
     await this.preImportObject(sObjectType, records);
 
     let retries = 0;
@@ -253,11 +256,9 @@ export default class Import extends SfdxCommand {
     while (retries < this.dataConfig.importRetries) {
       if (retries > 0) {
         this.ux.log(`Retrying ${colors.blue(sObjectType)} import...`);
-      } else {
-        this.ux.log(`Importing ${colors.blue(sObjectType)} records`);
       }
 
-      const importResult = await this.importRecords(records, sObjectType);
+      importResult = await this.importRecords(records, sObjectType);
 
       if (importResult.failure === 0) {
         break;
@@ -271,6 +272,8 @@ export default class Import extends SfdxCommand {
     }
 
     await this.postImportObject(sObjectType, records, importResult);
+
+    this.ux.stopSpinner();
 
     return importResult;
   }

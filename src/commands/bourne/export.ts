@@ -57,7 +57,7 @@ export default class Export extends SfdxCommand {
   private context: Context;
 
   private exportRecordsToDir(records: Record[], sObjectType: string, dirPath: string) {
-    const externalIdField = this.dataConfig[sObjectType].externalid;
+    const externalIdField = this.dataConfig.objects?.[sObjectType]?.externalid;
     if (records.length > 0 && !records[0](externalIdField)) {
       throw new SfdxError(
         "The External Id provided on the configuration file does not exist on the extracted record(s). Please ensure it is included in the object's query."
@@ -130,7 +130,7 @@ export default class Export extends SfdxCommand {
       const context: PreExportObjectContext = {
         ...this.context,
         sObjectType,
-        objectConfig: this.dataConfig[sObjectType],
+        objectConfig: this.dataConfig.objects?.[sObjectType],
       };
 
       await runScript<PreExportObjectContext>(scriptPath, context, {
@@ -145,7 +145,7 @@ export default class Export extends SfdxCommand {
       const context: PostExportObjectContext = {
         ...this.context,
         sObjectType,
-        objectConfig: this.dataConfig[sObjectType],
+        objectConfig: this.dataConfig.objects?.[sObjectType],
         records,
       };
 
@@ -161,7 +161,7 @@ export default class Export extends SfdxCommand {
     this.ux.startSpinner(`Retrieving ${colors.blue(sObjectType)} records, please wait...`);
 
     const records: Record[] = await this.getExportRecords(sObjectType);
-    const dirPath = pathUtils.join("data", this.dataConfig[sObjectType].directory);
+    const dirPath = pathUtils.join("data", this.dataConfig.objects?.[sObjectType]?.directory || sObjectType);
     this.clearDirectory(dirPath);
     this.exportRecordsToDir(records, sObjectType, dirPath);
 

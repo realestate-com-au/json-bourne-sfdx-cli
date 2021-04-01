@@ -34,11 +34,10 @@ export const getObjectsToProcess = (flags: OutputFlags<any>, config: Config): st
 };
 
 export const getDataConfig = (flags: OutputFlags<any>): Config => {
-  if (fs.existsSync(flags.configFile)) {
-    const configPath = `${process.cwd()}/${flags.configFile}`;
-    console.log("Load config from " + configPath);
+  if (fs.existsSync(flags.configfile)) {
+    const configPath = `${process.cwd()}/${flags.configfile}`;
     return JSON.parse(fs.readFileSync(configPath, { encoding: "utf8" }));
   }
 
-  throw new SfdxError(`Unable to find configuration file: ${flags.configFile}`);
+  throw new SfdxError(`Unable to find configuration file: ${flags.configfile}`);
 };
