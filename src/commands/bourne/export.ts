@@ -23,8 +23,6 @@ export default class Export extends SfdxCommand {
     `,
   ];
 
-  public static args = [{ name: "file" }];
-
   protected static flagsConfig = {
     object: flags.string({
       char: "o",

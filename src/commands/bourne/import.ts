@@ -1,11 +1,10 @@
-import { flags, SfdxCommand, TableOptions } from "@salesforce/command";
+import { flags, SfdxCommand, SfdxResult, TableOptions } from "@salesforce/command";
 import { Messages, SfdxError } from "@salesforce/core";
 import { getDataConfig, getObjectsToProcess } from "../../helper/helper";
 import { AnyJson } from "@salesforce/ts-types";
 import * as _ from "lodash";
 import {
   Config,
-  Context,
   RecordContext,
   ImportRequest,
   ImportResult,
@@ -15,6 +14,7 @@ import {
   PreImportContext,
   PreImportObjectContext,
   ImportService,
+  ImportContext,
 } from "../../types";
 import * as fs from "fs";
 import * as pathUtils from "path";
@@ -28,12 +28,12 @@ const messages = Messages.loadMessages("json-bourne-sfdx", "org");
 
 const objectImportResultTableOptions: TableOptions = {
   columns: [
-    { key: 'recordId', label: 'ID' },
-    { key: 'externalId', label: 'External ID' },
-    { key: 'message', label: 'Message' },
-    { key: 'result', label: 'Status' }
-  ]
-}
+    { key: "recordId", label: "ID" },
+    { key: "externalId", label: "External ID" },
+    { key: "result", label: "Status" },
+    { key: "message", label: "Message" },
+  ],
+};
 
 export default class Import extends SfdxCommand implements ImportService {
   public static description = messages.getMessage("pushDescription");
@@ -67,9 +67,30 @@ export default class Import extends SfdxCommand implements ImportService {
     }),
   };
 
-  public static args = [{ name: "file" }];
-
   protected static requiresUsername = true;
+
+  public static result: SfdxResult = {
+    tableColumnData: {
+      columns: [
+        {
+          key: "sObjectType",
+          label: "SObject Type",
+        },
+        {
+          key: "total",
+          label: "Total",
+        },
+        {
+          key: "success",
+          label: "Success",
+        },
+        {
+          key: "failure",
+          label: "Failure",
+        },
+      ],
+    },
+  };
 
   private _dataConfig: Config;
   protected get dataConfig(): Config {
@@ -88,14 +109,14 @@ export default class Import extends SfdxCommand implements ImportService {
     return this.flags.datadir || "data";
   }
 
-  private context: Context;
+  private context: ImportContext;
 
   private async getRecordTypesByDeveloperName(sObject: string): Promise<{ [developerName: string]: Record }> {
     const r = {};
     this.ux.startSpinner("Retrieving Record Type Information");
-    const queryResult = await this.org.getConnection().query<Record>(
-      `SELECT Id, Name, DeveloperName FROM RecordType WHERE sObjectType = '${sObject}'`
-    );
+    const queryResult = await this.org
+      .getConnection()
+      .query<Record>(`SELECT Id, Name, DeveloperName FROM RecordType WHERE sObjectType = '${sObject}'`);
     if (queryResult?.records && queryResult.records.length > 0) {
       queryResult.records.forEach((recordType) => {
         r[recordType.DeveloperName] = recordType;
@@ -109,13 +130,12 @@ export default class Import extends SfdxCommand implements ImportService {
   private readRecord(recordPath: string, recordTypes: { [developerName: string]: Record }): Record {
     let record: Record;
     try {
-      record = JSON.parse(fs.readFileSync(recordPath, { encoding: 'utf8' }));
+      record = JSON.parse(fs.readFileSync(recordPath, { encoding: "utf8" }));
     } catch (e) {
       this.ux.error(`Cound not load record from file: ${recordPath}`);
-      return;
     }
 
-    if (recordTypes) {
+    if (record && recordTypes) {
       const recordTypeId = recordTypes?.[record.RecordType?.DeveloperName]?.Id;
       if (recordTypeId) {
         record.RecordTypeId = recordTypeId;
@@ -131,6 +151,7 @@ export default class Import extends SfdxCommand implements ImportService {
   }
 
   public async readRecords(sObjectType: string): Promise<Record[]> {
+    const records: Record[] = [];
     const objectConfig = this.dataConfig.objects?.[sObjectType];
     if (objectConfig) {
       const objectDirPath = pathUtils.join(this.dataDir, objectConfig.directory);
@@ -141,13 +162,16 @@ export default class Import extends SfdxCommand implements ImportService {
           if (objectConfig.hasRecordTypes) {
             recordTypes = await this.getRecordTypesByDeveloperName(sObjectType);
           }
-          return files.map((file) => {
-            return this.readRecord(pathUtils.join(objectDirPath, file), recordTypes);
+          files.forEach((file) => {
+            const record = this.readRecord(pathUtils.join(objectDirPath, file), recordTypes);
+            if (record) {
+              records.push(record);
+            }
           });
         }
       }
     }
-    return [];
+    return records;
   }
 
   private buildRequests(records: Record[], sObjectType: string, payloads: ImportRequest[]) {
@@ -252,7 +276,14 @@ export default class Import extends SfdxCommand implements ImportService {
   private async importRecordsForObject(sObjectType: string): Promise<ImportResult> {
     const records = await this.readRecords(sObjectType);
     if (!records || records.length === 0) {
-      return;
+      return {
+        sObjectType,
+        failure: 0,
+        success: 0,
+        records: [],
+        results: [],
+        total: 0,
+      };
     }
 
     this.ux.startSpinner(`Importing ${colors.blue(sObjectType)} records`);
@@ -276,8 +307,12 @@ export default class Import extends SfdxCommand implements ImportService {
       retries++;
     }
 
-    if (importResult.failure > 0) {
-      throw `Import was unsuccessful after ${this.dataConfig.importRetries} attempts`;
+    if (
+      importResult.failure > 0 &&
+      !this.dataConfig.objects?.[sObjectType]?.allowPartialSuccess &&
+      !this.dataConfig.allowPartialSuccess
+    ) {
+      throw new SfdxError(`Import was unsuccessful after ${this.dataConfig.importRetries} attempts`);
     }
 
     await this.postImportObject(sObjectType, records, importResult);
@@ -330,16 +365,16 @@ export default class Import extends SfdxCommand implements ImportService {
     await this.preImport();
 
     const sObjectTypes = this.objectsToProcess;
-    const allResults: ImportResult[] = [];
+    const results: ImportResult[] = [];
 
     for (const sObjectType of sObjectTypes) {
-      allResults.push(await this.importRecordsForObject(sObjectType));
+      results.push(await this.importRecordsForObject(sObjectType));
     }
 
-    await this.postImport(allResults);
+    await this.postImport(results);
 
     delete this.context;
 
-    return allResults as any;
+    return results as any;
   }
 }

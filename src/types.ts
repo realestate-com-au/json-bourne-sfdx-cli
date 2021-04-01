@@ -12,6 +12,7 @@ export interface ObjectConfig {
   cleanupFields?: string[];
   hasRecordTypes?: boolean;
   enableMultiThreading?: boolean;
+  allowPartialSuccess?: boolean;
 }
 
 export interface ObjectConfigEntry {
@@ -41,6 +42,7 @@ export interface Config {
   useManagedPackage?: boolean;
   allObjects?: string[];
   objects?: { [sObject: string]: ObjectConfig };
+  allowPartialSuccess?: boolean;
 }
 
 export interface ImportRequest {
@@ -89,25 +91,30 @@ export interface ImportService {
 export interface Context {
   command: CommandContext;
   config: Config;
-  service: ImportService;
   state: {
     [key: string]: unknown
   }
 }
 
-export type PreImportContext = Context;
+export interface ImportContext extends Context {
+  service: ImportService;
+}
+
+export type PreImportContext = ImportContext;
 
 export interface RecordContext extends Context, ObjectConfigEntry {
   records: Record[];
 }
 
-export type PreImportObjectContext = RecordContext;
+export interface ImportRecordContext extends RecordContext, ImportContext {}
 
-export interface PostImportObjectContext extends RecordContext {
+export type PreImportObjectContext = ImportRecordContext;
+
+export interface PostImportObjectContext extends ImportRecordContext {
   importResult: ImportResult;
 }
 
-export interface PostImportContext extends Context {
+export interface PostImportContext extends ImportContext {
   results: ImportResult[];
 }
 
