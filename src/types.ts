@@ -81,9 +81,15 @@ export interface CommandContext {
   result: SfdxResult;
 }
 
+export interface ImportService {
+  readRecords(sObjectType: string): Promise<Record[]>;
+  importRecords(sObjectType: string, records: Record[]): Promise<ImportResult>;
+}
+
 export interface Context {
   command: CommandContext;
   config: Config;
+  service: ImportService;
   state: {
     [key: string]: unknown
   }

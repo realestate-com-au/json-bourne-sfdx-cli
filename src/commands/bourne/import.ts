@@ -1,4 +1,4 @@
-import { flags, SfdxCommand } from "@salesforce/command";
+import { flags, SfdxCommand, TableOptions } from "@salesforce/command";
 import { Messages, SfdxError } from "@salesforce/core";
 import { getDataConfig, getObjectsToProcess } from "../../helper/helper";
 import { AnyJson } from "@salesforce/ts-types";
@@ -14,6 +14,7 @@ import {
   PostImportContext,
   PreImportContext,
   PreImportObjectContext,
+  ImportService,
 } from "../../types";
 import * as fs from "fs";
 import * as pathUtils from "path";
@@ -25,7 +26,16 @@ Messages.importMessagesDirectory(__dirname);
 
 const messages = Messages.loadMessages("json-bourne-sfdx", "org");
 
-export default class Import extends SfdxCommand {
+const objectImportResultTableOptions: TableOptions = {
+  columns: [
+    { key: 'recordId', label: 'ID' },
+    { key: 'externalId', label: 'External ID' },
+    { key: 'message', label: 'Message' },
+    { key: 'result', label: 'Status' }
+  ]
+}
+
+export default class Import extends SfdxCommand implements ImportService {
   public static description = messages.getMessage("pushDescription");
 
   public static examples = [
@@ -120,7 +130,7 @@ export default class Import extends SfdxCommand {
     return record;
   }
 
-  private async readRecords(sObjectType: string): Promise<Record[]> {
+  public async readRecords(sObjectType: string): Promise<Record[]> {
     const objectConfig = this.dataConfig.objects?.[sObjectType];
     if (objectConfig) {
       const objectDirPath = pathUtils.join(this.dataDir, objectConfig.directory);
@@ -174,7 +184,7 @@ export default class Import extends SfdxCommand {
     }
   };
 
-  private async importRecords(records: Record[], sObjectType: string): Promise<ImportResult> {
+  public async importRecords(sObjectType: string, records: Record[]): Promise<ImportResult> {
     const results: RecordImportResult[] = [];
     if (records.length > 0) {
       const resultsHandler = (items: RecordImportResult[]) => {
@@ -241,7 +251,6 @@ export default class Import extends SfdxCommand {
 
   private async importRecordsForObject(sObjectType: string): Promise<ImportResult> {
     const records = await this.readRecords(sObjectType);
-
     if (!records || records.length === 0) {
       return;
     }
@@ -258,7 +267,7 @@ export default class Import extends SfdxCommand {
         this.ux.log(`Retrying ${colors.blue(sObjectType)} import...`);
       }
 
-      importResult = await this.importRecords(records, sObjectType);
+      importResult = await this.importRecords(sObjectType, records);
 
       if (importResult.failure === 0) {
         break;
@@ -274,6 +283,8 @@ export default class Import extends SfdxCommand {
     await this.postImportObject(sObjectType, records, importResult);
 
     this.ux.stopSpinner();
+
+    this.ux.table(importResult.results, objectImportResultTableOptions);
 
     return importResult;
   }
@@ -312,16 +323,17 @@ export default class Import extends SfdxCommand {
         result: this.result,
       },
       config: this.dataConfig,
+      service: this,
       state: {},
     };
 
     await this.preImport();
 
-    const sObjects = this.objectsToProcess;
+    const sObjectTypes = this.objectsToProcess;
     const allResults: ImportResult[] = [];
 
-    for (const sObject of sObjects) {
-      allResults.push(await this.importRecordsForObject(sObject));
+    for (const sObjectType of sObjectTypes) {
+      allResults.push(await this.importRecordsForObject(sObjectType));
     }
 
     await this.postImport(allResults);
