@@ -6,16 +6,19 @@ export interface PluginLoadOptions {
   tsResolveBaseDir?: string;
 }
 
-export const loadScriptModule = (path: string, opts?: PluginLoadOptions): any => {
+export const loadScriptModule = (
+  path: string,
+  opts?: PluginLoadOptions
+): any => {
   if (path.endsWith(".ts")) {
     let tsResolveBaseDir = opts?.tsResolveBaseDir;
     if (tsResolveBaseDir && !pathUtils.isAbsolute(tsResolveBaseDir)) {
       tsResolveBaseDir = pathUtils.join(process.cwd(), tsResolveBaseDir);
     }
-    if(!tsResolveBaseDir) {
+    if (!tsResolveBaseDir) {
       tsResolveBaseDir = process.cwd();
     }
-    if(!pathUtils.isAbsolute(path)) {
+    if (!pathUtils.isAbsolute(path)) {
       path = pathUtils.join(tsResolveBaseDir, path);
     }
     const tsNodeModule = resolveSync("ts-node", {
@@ -51,7 +54,11 @@ export const loadScriptModule = (path: string, opts?: PluginLoadOptions): any =>
   return require(path);
 };
 
-export const runScript = async <C = void, R = void>(path: string, context: C, opts?: PluginLoadOptions): Promise<R> => {
+export const runScript = async <C = void, R = void>(
+  path: string,
+  context: C,
+  opts?: PluginLoadOptions
+): Promise<R> => {
   const scriptModule = loadScriptModule(path, opts);
   let result;
   if (typeof scriptModule === "function") {

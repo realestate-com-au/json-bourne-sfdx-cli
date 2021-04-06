@@ -1,4 +1,9 @@
-import { flags, SfdxCommand, SfdxResult, TableOptions } from "@salesforce/command";
+import {
+  flags,
+  SfdxCommand,
+  SfdxResult,
+  TableOptions,
+} from "@salesforce/command";
 import { Messages, SfdxError } from "@salesforce/core";
 import { getDataConfig, getObjectsToProcess } from "../../helper/helper";
 import { AnyJson } from "@salesforce/ts-types";
@@ -67,8 +72,8 @@ export default class Import extends SfdxCommand implements ImportService {
     }),
     allowpartial: flags.boolean({
       char: "p",
-      description: messages.getMessage("allowPartial")
-    })
+      description: messages.getMessage("allowPartial"),
+    }),
   };
 
   protected static requiresUsername = true;
@@ -115,12 +120,16 @@ export default class Import extends SfdxCommand implements ImportService {
 
   private context: ImportContext;
 
-  private async getRecordTypesByDeveloperName(sObject: string): Promise<{ [developerName: string]: Record }> {
+  private async getRecordTypesByDeveloperName(
+    sObject: string
+  ): Promise<{ [developerName: string]: Record }> {
     const r = {};
     this.ux.startSpinner("Retrieving Record Type Information");
     const queryResult = await this.org
       .getConnection()
-      .query<Record>(`SELECT Id, Name, DeveloperName FROM RecordType WHERE sObjectType = '${sObject}'`);
+      .query<Record>(
+        `SELECT Id, Name, DeveloperName FROM RecordType WHERE sObjectType = '${sObject}'`
+      );
     if (queryResult?.records && queryResult.records.length > 0) {
       queryResult.records.forEach((recordType) => {
         r[recordType.DeveloperName] = recordType;
@@ -131,7 +140,10 @@ export default class Import extends SfdxCommand implements ImportService {
     return r;
   }
 
-  private readRecord(recordPath: string, recordTypes: { [developerName: string]: Record }): Record {
+  private readRecord(
+    recordPath: string,
+    recordTypes: { [developerName: string]: Record }
+  ): Record {
     let record: Record;
     try {
       record = JSON.parse(fs.readFileSync(recordPath, { encoding: "utf8" }));
@@ -145,9 +157,13 @@ export default class Import extends SfdxCommand implements ImportService {
         record.RecordTypeId = recordTypeId;
         delete record.RecordType;
       } else if (record.RecordType) {
-        this.ux.log("This record does not contain a value for Record Type, skipping transformation.");
+        this.ux.log(
+          "This record does not contain a value for Record Type, skipping transformation."
+        );
       } else {
-        throw new SfdxError("Record Type not found for " + record.RecordType.DeveloperName);
+        throw new SfdxError(
+          "Record Type not found for " + record.RecordType.DeveloperName
+        );
       }
     }
 
@@ -157,16 +173,24 @@ export default class Import extends SfdxCommand implements ImportService {
   public async readRecords(objectConfig: ObjectConfig): Promise<Record[]> {
     const records: Record[] = [];
     if (objectConfig) {
-      const objectDirPath = pathUtils.join(this.dataDir, objectConfig.directory);
+      const objectDirPath = pathUtils.join(
+        this.dataDir,
+        objectConfig.directory
+      );
       if (fs.existsSync(objectDirPath)) {
         const files = fs.readdirSync(objectDirPath);
         if (files.length > 0) {
           let recordTypes;
           if (objectConfig.hasRecordTypes) {
-            recordTypes = await this.getRecordTypesByDeveloperName(objectConfig.sObjectType);
+            recordTypes = await this.getRecordTypesByDeveloperName(
+              objectConfig.sObjectType
+            );
           }
           files.forEach((file) => {
-            const record = this.readRecord(pathUtils.join(objectDirPath, file), recordTypes);
+            const record = this.readRecord(
+              pathUtils.join(objectDirPath, file),
+              recordTypes
+            );
             if (record) {
               records.push(record);
             }
@@ -177,7 +201,11 @@ export default class Import extends SfdxCommand implements ImportService {
     return records;
   }
 
-  private buildRequests(records: Record[], objectConfig: ObjectConfig, payloads: ImportRequest[]) {
+  private buildRequests(
+    records: Record[],
+    objectConfig: ObjectConfig,
+    payloads: ImportRequest[]
+  ) {
     const payload = JSON.stringify(records, null, 0);
     if (payload.length > this.dataConfig.payloadLength) {
       const splitRecords = Import.splitInHalf(records);
@@ -201,17 +229,26 @@ export default class Import extends SfdxCommand implements ImportService {
     return splitRecords;
   }
 
-  private _requestHandler = async (request: ImportRequest): Promise<RecordImportResult[]> => {
-    const restUrl = this.dataConfig.useManagedPackage ? "/JSON/bourne/v1" : "/bourne/v1";
+  private _requestHandler = async (
+    request: ImportRequest
+  ): Promise<RecordImportResult[]> => {
+    const restUrl = this.dataConfig.useManagedPackage
+      ? "/JSON/bourne/v1"
+      : "/bourne/v1";
     try {
-      return JSON.parse(await this.org.getConnection().apex.post<string>(restUrl, request));
+      return JSON.parse(
+        await this.org.getConnection().apex.post<string>(restUrl, request)
+      );
     } catch (error) {
       this.ux.log(error);
       throw error;
     }
   };
 
-  public async importRecords(objectConfig: ObjectConfig, records: Record[]): Promise<ImportResult> {
+  public async importRecords(
+    objectConfig: ObjectConfig,
+    records: Record[]
+  ): Promise<ImportResult> {
     const results: RecordImportResult[] = [];
     if (records.length > 0) {
       const resultsHandler = (items: RecordImportResult[]) => {
@@ -223,7 +260,9 @@ export default class Import extends SfdxCommand implements ImportService {
       this.buildRequests(records, objectConfig, requests);
       if (objectConfig.enableMultiThreading) {
         const promises = requests.map(this._requestHandler);
-        const promiseResults: RecordImportResult[][] = await Promise.all(promises);
+        const promiseResults: RecordImportResult[][] = await Promise.all(
+          promises
+        );
         promiseResults.forEach(resultsHandler);
       } else {
         for (const request of requests) {
@@ -231,7 +270,9 @@ export default class Import extends SfdxCommand implements ImportService {
         }
       }
     }
-    const failureResults = results.filter((result) => result.result === "FAILED");
+    const failureResults = results.filter(
+      (result) => result.result === "FAILED"
+    );
     return {
       sObjectType: objectConfig.sObjectType,
       records,
@@ -258,7 +299,11 @@ export default class Import extends SfdxCommand implements ImportService {
     }
   }
 
-  private async postImportObject(objectConfig: ObjectConfig, records: Record[], importResult: ImportResult) {
+  private async postImportObject(
+    objectConfig: ObjectConfig,
+    records: Record[],
+    importResult: ImportResult
+  ) {
     const scriptPath = this.dataConfig?.script?.postimportobject;
     if (scriptPath) {
       const context: PostImportObjectContext = {
@@ -274,7 +319,9 @@ export default class Import extends SfdxCommand implements ImportService {
     }
   }
 
-  private async importRecordsForObject(objectConfig: ObjectConfig): Promise<ImportResult> {
+  private async importRecordsForObject(
+    objectConfig: ObjectConfig
+  ): Promise<ImportResult> {
     const records = await this.readRecords(objectConfig);
     if (!records || records.length === 0) {
       return {
@@ -287,7 +334,9 @@ export default class Import extends SfdxCommand implements ImportService {
       };
     }
 
-    this.ux.startSpinner(`Importing ${colors.blue(objectConfig.sObjectType)} records`);
+    this.ux.startSpinner(
+      `Importing ${colors.blue(objectConfig.sObjectType)} records`
+    );
 
     await this.preImportObject(objectConfig, records);
 
@@ -296,7 +345,9 @@ export default class Import extends SfdxCommand implements ImportService {
 
     while (retries < this.dataConfig.importRetries) {
       if (retries > 0) {
-        this.ux.log(`Retrying ${colors.blue(objectConfig.sObjectType)} import...`);
+        this.ux.log(
+          `Retrying ${colors.blue(objectConfig.sObjectType)} import...`
+        );
       }
 
       importResult = await this.importRecords(objectConfig, records);
@@ -313,7 +364,9 @@ export default class Import extends SfdxCommand implements ImportService {
       !this.dataConfig.allowPartial &&
       !this.flags.allowpartial
     ) {
-      throw new SfdxError(`Import was unsuccessful after ${this.dataConfig.importRetries} attempts`);
+      throw new SfdxError(
+        `Import was unsuccessful after ${this.dataConfig.importRetries} attempts`
+      );
     }
 
     await this.postImportObject(objectConfig, records, importResult);
@@ -367,7 +420,6 @@ export default class Import extends SfdxCommand implements ImportService {
 
     await this.preImport();
 
-    
     const results: ImportResult[] = [];
 
     for (const objectConfig of objectConfigs) {

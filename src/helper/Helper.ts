@@ -27,7 +27,10 @@ export const removeField = (record: Record, fieldName: string): void => {
  * @param keyGetter
  * @returns
  */
-export const keyBasedDedup = <T = any>(items: T[], keyGetter: (item: T) => string): T[] => {
+export const keyBasedDedup = <T = any>(
+  items: T[],
+  keyGetter: (item: T) => string
+): T[] => {
   if (items && items.length > 0) {
     const keyDone: { [key: string]: boolean } = {};
     const r: T[] = [];
@@ -53,7 +56,10 @@ const objectConfigKeyGetter = (item: ObjectConfig): string => {
  * @param config
  * @returns
  */
-export const getObjectsToProcess = (flags: OutputFlags<any>, config: Config): ObjectConfig[] => {
+export const getObjectsToProcess = (
+  flags: OutputFlags<any>,
+  config: Config
+): ObjectConfig[] => {
   let sObjectTypes: string[];
   if (flags.object) {
     sObjectTypes = (flags.object as string).split(",");
@@ -65,13 +71,17 @@ export const getObjectsToProcess = (flags: OutputFlags<any>, config: Config): Ob
   }
 
   if (!sObjectTypes || sObjectTypes.length === 0) {
-    throw new SfdxError("Please specify object types to import or configure objects correctly.");
+    throw new SfdxError(
+      "Please specify object types to import or configure objects correctly."
+    );
   }
 
   const objectConfigs = sObjectTypes.map((sObjectType) => {
     const objectConfig = config.objects?.[sObjectType];
     if (!objectConfig) {
-      throw new SfdxError(`There is no configuration specified for object: ${sObjectType}`);
+      throw new SfdxError(
+        `There is no configuration specified for object: ${sObjectType}`
+      );
     }
     return {
       sObjectType,
@@ -89,7 +99,11 @@ export const getObjectsToProcess = (flags: OutputFlags<any>, config: Config): Ob
  */
 export const getDataConfig = (flags: OutputFlags<any>): Config => {
   if (fs.existsSync(flags.configfile)) {
-    return JSON.parse(fs.readFileSync(pathUtils.join(process.cwd(), flags.configfile), { encoding: "utf8" }));
+    return JSON.parse(
+      fs.readFileSync(pathUtils.join(process.cwd(), flags.configfile), {
+        encoding: "utf8",
+      })
+    );
   }
 
   throw new SfdxError(`Unable to find configuration file: ${flags.configfile}`);

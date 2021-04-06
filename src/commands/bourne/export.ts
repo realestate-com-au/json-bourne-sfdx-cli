@@ -2,7 +2,11 @@ import { flags, SfdxCommand, SfdxResult } from "@salesforce/command";
 import { Messages, SfdxError } from "@salesforce/core";
 import { AnyJson } from "@salesforce/ts-types";
 import { Record } from "jsforce";
-import { getDataConfig, getObjectsToProcess, removeField } from "../../helper/helper";
+import {
+  getDataConfig,
+  getObjectsToProcess,
+  removeField,
+} from "../../helper/helper";
 import {
   Config,
   Context,
@@ -83,7 +87,11 @@ export default class Export extends SfdxCommand {
 
   private context: Context;
 
-  private async exportRecordsToDir(records: Record[], objectConfig: ObjectConfig, dirPath: string): Promise<void> {
+  private async exportRecordsToDir(
+    records: Record[],
+    objectConfig: ObjectConfig,
+    dirPath: string
+  ): Promise<void> {
     if (!records || records.length === 0) {
       return;
     }
@@ -104,7 +112,10 @@ export default class Export extends SfdxCommand {
           "There are records without External Ids. Ensure all records that are extracted have a value for the field specified as the External Id."
         );
       }
-      fileName = pathUtils.join(dirPath, `${fileName.replace(/\s+/g, "-")}.json`);
+      fileName = pathUtils.join(
+        dirPath,
+        `${fileName.replace(/\s+/g, "-")}.json`
+      );
       await fsp.writeFile(fileName, JSON.stringify(record, undefined, 2));
     });
 
@@ -129,7 +140,9 @@ export default class Export extends SfdxCommand {
     }
   }
 
-  private async getExportRecords(objectConfig: ObjectConfig): Promise<Record[]> {
+  private async getExportRecords(
+    objectConfig: ObjectConfig
+  ): Promise<Record[]> {
     return new Promise((resolve, reject) => {
       var records = [];
       this.org
@@ -174,7 +187,10 @@ export default class Export extends SfdxCommand {
     }
   }
 
-  private async postExportObject(objectConfig: ObjectConfig, records: Record[]) {
+  private async postExportObject(
+    objectConfig: ObjectConfig,
+    records: Record[]
+  ) {
     const scriptPath = this.dataConfig?.script?.postimportobject;
     if (scriptPath) {
       const context: PostExportObjectContext = {
@@ -189,13 +205,21 @@ export default class Export extends SfdxCommand {
     }
   }
 
-  private async exportObject(objectConfig: ObjectConfig): Promise<ExportResult> {
+  private async exportObject(
+    objectConfig: ObjectConfig
+  ): Promise<ExportResult> {
     await this.preExportObject(objectConfig);
 
-    this.ux.startSpinner(`Retrieving ${colors.blue(objectConfig.sObjectType)} records`);
+    this.ux.startSpinner(
+      `Retrieving ${colors.blue(objectConfig.sObjectType)} records`
+    );
 
     const records: Record[] = await this.getExportRecords(objectConfig);
-    const path = pathUtils.join(process.cwd(), "data", objectConfig.directory || objectConfig.sObjectType);
+    const path = pathUtils.join(
+      process.cwd(),
+      "data",
+      objectConfig.directory || objectConfig.sObjectType
+    );
 
     await this.clearDirectory(path);
     await this.exportRecordsToDir(records, objectConfig, path);

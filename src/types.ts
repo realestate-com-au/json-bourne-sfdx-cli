@@ -1,8 +1,8 @@
 import { Record } from "jsforce";
-import { ConfigAggregator, Logger, Org, SfdxProject } from '@salesforce/core';
-import { JsonMap } from '@salesforce/ts-types';
-import { OutputArgs, OutputFlags } from '@oclif/parser';
-import { SfdxResult, UX } from '@salesforce/command';
+import { ConfigAggregator, Logger, Org, SfdxProject } from "@salesforce/core";
+import { JsonMap } from "@salesforce/ts-types";
+import { OutputArgs, OutputFlags } from "@oclif/parser";
+import { SfdxResult, UX } from "@salesforce/command";
 
 export interface ObjectConfig {
   sObjectType?: string;
@@ -16,15 +16,15 @@ export interface ObjectConfig {
 }
 
 export interface ScriptConfig {
-    preimport?: string;
-    preimportobject?: string;
-    postimportobject?: string;
-    postimport?: string;
-    preexport?: string;
-    preexportobject?: string;
-    postexportobject?: string;
-    postexport?: string;
-    tsResolveBaseDir?: string;
+  preimport?: string;
+  preimportobject?: string;
+  postimportobject?: string;
+  postimport?: string;
+  preexport?: string;
+  preexportobject?: string;
+  postexportobject?: string;
+  postexport?: string;
+  tsResolveBaseDir?: string;
 }
 
 export interface Config {
@@ -80,7 +80,10 @@ export interface CommandContext {
 
 export interface ImportService {
   readRecords(objectConfig: ObjectConfig): Promise<Record[]>;
-  importRecords(objectConfig: ObjectConfig, records: Record[]): Promise<ImportResult>;
+  importRecords(
+    objectConfig: ObjectConfig,
+    records: Record[]
+  ): Promise<ImportResult>;
 }
 
 export interface Context {
@@ -88,8 +91,8 @@ export interface Context {
   config: Config;
   objectConfigs: ObjectConfig[];
   state: {
-    [key: string]: unknown
-  }
+    [key: string]: unknown;
+  };
 }
 
 export interface ImportContext extends Context {
