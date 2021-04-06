@@ -6,7 +6,7 @@ import {
   getDataConfig,
   getObjectsToProcess,
   removeField,
-} from "../../helper/helper";
+} from "../../helper/common";
 import {
   Config,
   Context,

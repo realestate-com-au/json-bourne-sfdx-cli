@@ -5,7 +5,7 @@ import {
   TableOptions,
 } from "@salesforce/command";
 import { Messages, SfdxError } from "@salesforce/core";
-import { getDataConfig, getObjectsToProcess } from "../../helper/helper";
+import { getDataConfig, getObjectsToProcess } from "../../helper/common";
 import { AnyJson } from "@salesforce/ts-types";
 import {
   Config,
