@@ -5,6 +5,7 @@ import { OutputArgs, OutputFlags } from '@oclif/parser';
 import { SfdxResult, UX } from '@salesforce/command';
 
 export interface ObjectConfig {
+  sObjectType?: string;
   query?: string;
   externalid?: string;
   directory?: string;
@@ -12,12 +13,6 @@ export interface ObjectConfig {
   cleanupFields?: string[];
   hasRecordTypes?: boolean;
   enableMultiThreading?: boolean;
-  allowPartialSuccess?: boolean;
-}
-
-export interface ObjectConfigEntry {
-  sObjectType: string;
-  objectConfig: ObjectConfig;
 }
 
 export interface ScriptConfig {
@@ -40,9 +35,9 @@ export interface Config {
   payloadLength?: number;
   importRetries?: number;
   useManagedPackage?: boolean;
-  allObjects?: string[];
-  objects?: { [sObject: string]: ObjectConfig };
-  allowPartialSuccess?: boolean;
+  allObjects?: string[]; // NOTE: to support legacy config
+  objects?: { [sObjectType: string]: ObjectConfig } | ObjectConfig[]; // NOTE: map setup to support legacy config
+  allowPartial?: boolean;
 }
 
 export interface ImportRequest {
@@ -84,13 +79,14 @@ export interface CommandContext {
 }
 
 export interface ImportService {
-  readRecords(sObjectType: string): Promise<Record[]>;
-  importRecords(sObjectType: string, records: Record[]): Promise<ImportResult>;
+  readRecords(objectConfig: ObjectConfig): Promise<Record[]>;
+  importRecords(objectConfig: ObjectConfig, records: Record[]): Promise<ImportResult>;
 }
 
 export interface Context {
   command: CommandContext;
   config: Config;
+  objectConfigs: ObjectConfig[];
   state: {
     [key: string]: unknown
   }
@@ -102,7 +98,11 @@ export interface ImportContext extends Context {
 
 export type PreImportContext = ImportContext;
 
-export interface RecordContext extends Context, ObjectConfigEntry {
+export interface ObjectContext extends Context {
+  objectConfig: ObjectConfig;
+}
+
+export interface RecordContext extends ObjectContext {
   records: Record[];
 }
 
@@ -120,12 +120,14 @@ export interface PostImportContext extends ImportContext {
 
 export interface ExportResult {
   sObjectType: string;
+  total: number;
+  path: string;
   records: Record[];
 }
 
 export type PreExportContext = Context;
 
-export interface PreExportObjectContext extends Context, ObjectConfigEntry {}
+export interface PreExportObjectContext extends Context, ObjectContext {}
 
 export type PostExportObjectContext = RecordContext;
 

@@ -2,10 +2,9 @@ import { flags, SfdxCommand, SfdxResult, TableOptions } from "@salesforce/comman
 import { Messages, SfdxError } from "@salesforce/core";
 import { getDataConfig, getObjectsToProcess } from "../../helper/helper";
 import { AnyJson } from "@salesforce/ts-types";
-import * as _ from "lodash";
 import {
   Config,
-  RecordContext,
+  ObjectContext,
   ImportRequest,
   ImportResult,
   PostImportObjectContext,
@@ -15,6 +14,7 @@ import {
   PreImportObjectContext,
   ImportService,
   ImportContext,
+  ObjectConfig,
 } from "../../types";
 import * as fs from "fs";
 import * as pathUtils from "path";
@@ -65,6 +65,10 @@ export default class Import extends SfdxCommand implements ImportService {
       char: "r",
       description: messages.getMessage("removeObjects"),
     }),
+    allowpartial: flags.boolean({
+      char: "p",
+      description: messages.getMessage("allowPartial")
+    })
   };
 
   protected static requiresUsername = true;
@@ -100,9 +104,9 @@ export default class Import extends SfdxCommand implements ImportService {
     return this._dataConfig;
   }
 
-  private get objectsToProcess() {
+  private get objectsToProcess(): ObjectConfig[] {
     const sObjects = getObjectsToProcess(this.flags, this.dataConfig);
-    return this.flags.remove ? _.uniq(sObjects.reverse()) : sObjects;
+    return this.flags.remove ? sObjects.reverse() : sObjects;
   }
 
   private get dataDir(): string {
@@ -150,9 +154,8 @@ export default class Import extends SfdxCommand implements ImportService {
     return record;
   }
 
-  public async readRecords(sObjectType: string): Promise<Record[]> {
+  public async readRecords(objectConfig: ObjectConfig): Promise<Record[]> {
     const records: Record[] = [];
-    const objectConfig = this.dataConfig.objects?.[sObjectType];
     if (objectConfig) {
       const objectDirPath = pathUtils.join(this.dataDir, objectConfig.directory);
       if (fs.existsSync(objectDirPath)) {
@@ -160,7 +163,7 @@ export default class Import extends SfdxCommand implements ImportService {
         if (files.length > 0) {
           let recordTypes;
           if (objectConfig.hasRecordTypes) {
-            recordTypes = await this.getRecordTypesByDeveloperName(sObjectType);
+            recordTypes = await this.getRecordTypesByDeveloperName(objectConfig.sObjectType);
           }
           files.forEach((file) => {
             const record = this.readRecord(pathUtils.join(objectDirPath, file), recordTypes);
@@ -174,18 +177,18 @@ export default class Import extends SfdxCommand implements ImportService {
     return records;
   }
 
-  private buildRequests(records: Record[], sObjectType: string, payloads: ImportRequest[]) {
+  private buildRequests(records: Record[], objectConfig: ObjectConfig, payloads: ImportRequest[]) {
     const payload = JSON.stringify(records, null, 0);
     if (payload.length > this.dataConfig.payloadLength) {
       const splitRecords = Import.splitInHalf(records);
-      this.buildRequests(splitRecords[0], sObjectType, payloads);
-      this.buildRequests(splitRecords[1], sObjectType, payloads);
+      this.buildRequests(splitRecords[0], objectConfig, payloads);
+      this.buildRequests(splitRecords[1], objectConfig, payloads);
     } else {
       payloads.push({
-        extIdField: this.dataConfig?.objects?.[sObjectType].externalid,
+        extIdField: objectConfig.externalid,
         operation: this.flags.remove ? "delete" : "upsert",
         payload: records,
-        sObjectType: sObjectType,
+        sObjectType: objectConfig.sObjectType,
       });
     }
   }
@@ -208,7 +211,7 @@ export default class Import extends SfdxCommand implements ImportService {
     }
   };
 
-  public async importRecords(sObjectType: string, records: Record[]): Promise<ImportResult> {
+  public async importRecords(objectConfig: ObjectConfig, records: Record[]): Promise<ImportResult> {
     const results: RecordImportResult[] = [];
     if (records.length > 0) {
       const resultsHandler = (items: RecordImportResult[]) => {
@@ -217,8 +220,8 @@ export default class Import extends SfdxCommand implements ImportService {
         }
       };
       const requests: ImportRequest[] = [];
-      this.buildRequests(records, sObjectType, requests);
-      if (this.dataConfig.objects?.[sObjectType]?.enableMultiThreading) {
+      this.buildRequests(records, objectConfig, requests);
+      if (objectConfig.enableMultiThreading) {
         const promises = requests.map(this._requestHandler);
         const promiseResults: RecordImportResult[][] = await Promise.all(promises);
         promiseResults.forEach(resultsHandler);
@@ -230,7 +233,7 @@ export default class Import extends SfdxCommand implements ImportService {
     }
     const failureResults = results.filter((result) => result.result === "FAILED");
     return {
-      sObjectType,
+      sObjectType: objectConfig.sObjectType,
       records,
       results,
       total: results.length,
@@ -240,29 +243,27 @@ export default class Import extends SfdxCommand implements ImportService {
     };
   }
 
-  private async preImportObject(sObjectType: string, records: Record[]) {
+  private async preImportObject(objectConfig: ObjectConfig, records: Record[]) {
     const scriptPath = this.dataConfig?.script?.preimportobject;
     if (scriptPath) {
       const context: PreImportObjectContext = {
         ...this.context,
-        sObjectType,
-        objectConfig: this.dataConfig.objects?.[sObjectType],
+        objectConfig,
         records,
       };
 
-      await runScript<RecordContext>(scriptPath, context, {
+      await runScript<ObjectContext>(scriptPath, context, {
         tsResolveBaseDir: this.dataConfig.script.tsResolveBaseDir,
       });
     }
   }
 
-  private async postImportObject(sObjectType: string, records: Record[], importResult: ImportResult) {
+  private async postImportObject(objectConfig: ObjectConfig, records: Record[], importResult: ImportResult) {
     const scriptPath = this.dataConfig?.script?.postimportobject;
     if (scriptPath) {
       const context: PostImportObjectContext = {
         ...this.context,
-        sObjectType,
-        objectConfig: this.dataConfig.objects?.[sObjectType],
+        objectConfig,
         records,
         importResult,
       };
@@ -273,11 +274,11 @@ export default class Import extends SfdxCommand implements ImportService {
     }
   }
 
-  private async importRecordsForObject(sObjectType: string): Promise<ImportResult> {
-    const records = await this.readRecords(sObjectType);
+  private async importRecordsForObject(objectConfig: ObjectConfig): Promise<ImportResult> {
+    const records = await this.readRecords(objectConfig);
     if (!records || records.length === 0) {
       return {
-        sObjectType,
+        sObjectType: objectConfig.sObjectType,
         failure: 0,
         success: 0,
         records: [],
@@ -286,19 +287,19 @@ export default class Import extends SfdxCommand implements ImportService {
       };
     }
 
-    this.ux.startSpinner(`Importing ${colors.blue(sObjectType)} records`);
+    this.ux.startSpinner(`Importing ${colors.blue(objectConfig.sObjectType)} records`);
 
-    await this.preImportObject(sObjectType, records);
+    await this.preImportObject(objectConfig, records);
 
     let retries = 0;
     let importResult: ImportResult;
 
     while (retries < this.dataConfig.importRetries) {
       if (retries > 0) {
-        this.ux.log(`Retrying ${colors.blue(sObjectType)} import...`);
+        this.ux.log(`Retrying ${colors.blue(objectConfig.sObjectType)} import...`);
       }
 
-      importResult = await this.importRecords(sObjectType, records);
+      importResult = await this.importRecords(objectConfig, records);
 
       if (importResult.failure === 0) {
         break;
@@ -309,15 +310,15 @@ export default class Import extends SfdxCommand implements ImportService {
 
     if (
       importResult.failure > 0 &&
-      !this.dataConfig.objects?.[sObjectType]?.allowPartialSuccess &&
-      !this.dataConfig.allowPartialSuccess
+      !this.dataConfig.allowPartial &&
+      !this.flags.allowpartial
     ) {
       throw new SfdxError(`Import was unsuccessful after ${this.dataConfig.importRetries} attempts`);
     }
 
-    await this.postImportObject(sObjectType, records, importResult);
+    await this.postImportObject(objectConfig, records, importResult);
 
-    this.ux.stopSpinner();
+    this.ux.stopSpinner(`${importResult.total} records processed`);
 
     this.ux.table(importResult.results, objectImportResultTableOptions);
 
@@ -344,6 +345,7 @@ export default class Import extends SfdxCommand implements ImportService {
   }
 
   public async run(): Promise<AnyJson> {
+    const objectConfigs = this.objectsToProcess;
     this.context = {
       command: {
         args: this.args,
@@ -358,17 +360,18 @@ export default class Import extends SfdxCommand implements ImportService {
         result: this.result,
       },
       config: this.dataConfig,
+      objectConfigs,
       service: this,
       state: {},
     };
 
     await this.preImport();
 
-    const sObjectTypes = this.objectsToProcess;
+    
     const results: ImportResult[] = [];
 
-    for (const sObjectType of sObjectTypes) {
-      results.push(await this.importRecordsForObject(sObjectType));
+    for (const objectConfig of objectConfigs) {
+      results.push(await this.importRecordsForObject(objectConfig));
     }
 
     await this.postImport(results);

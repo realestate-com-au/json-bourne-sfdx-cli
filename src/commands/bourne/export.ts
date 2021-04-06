@@ -1,14 +1,24 @@
-import { flags, SfdxCommand } from "@salesforce/command";
+import { flags, SfdxCommand, SfdxResult } from "@salesforce/command";
 import { Messages, SfdxError } from "@salesforce/core";
 import { AnyJson } from "@salesforce/ts-types";
 import { Record } from "jsforce";
-import * as _ from "lodash";
 import { getDataConfig, getObjectsToProcess, removeField } from "../../helper/helper";
-import { Config, Context, ExportResult, PostExportContext, PostExportObjectContext, PreExportContext, PreExportObjectContext } from "../../types";
+import {
+  Config,
+  Context,
+  ExportResult,
+  ObjectConfig,
+  PostExportContext,
+  PostExportObjectContext,
+  PreExportContext,
+  PreExportObjectContext,
+} from "../../types";
 import * as pathUtils from "path";
 import * as fs from "fs";
 import * as colors from "colors";
 import { runScript } from "../../helper/script";
+
+const fsp = fs.promises;
 
 Messages.importMessagesDirectory(__dirname);
 
@@ -40,6 +50,25 @@ export default class Export extends SfdxCommand {
 
   protected static requiresUsername = true;
 
+  public static result: SfdxResult = {
+    tableColumnData: {
+      columns: [
+        {
+          key: "sObjectType",
+          label: "SObject Type",
+        },
+        {
+          key: "total",
+          label: "Total",
+        },
+        {
+          key: "path",
+          label: "Path",
+        },
+      ],
+    },
+  };
+
   private _dataConfig: Config;
   protected get dataConfig(): Config {
     if (!this._dataConfig) {
@@ -48,41 +77,42 @@ export default class Export extends SfdxCommand {
     return this._dataConfig;
   }
 
-  private get objectsToProcess(): string[] {
-    return _.uniq(getObjectsToProcess(this.flags, this.dataConfig));
+  private get objectsToProcess(): ObjectConfig[] {
+    return getObjectsToProcess(this.flags, this.dataConfig);
   }
 
   private context: Context;
 
-  private exportRecordsToDir(records: Record[], sObjectType: string, dirPath: string) {
-    const externalIdField = this.dataConfig.objects?.[sObjectType]?.externalid;
-    if (records.length > 0 && !records[0](externalIdField)) {
+  private async exportRecordsToDir(records: Record[], objectConfig: ObjectConfig, dirPath: string): Promise<void> {
+    if (!records || records.length === 0) {
+      return;
+    }
+
+    const externalIdField = objectConfig.externalid;
+    if (records.length > 0 && !records[0][externalIdField]) {
       throw new SfdxError(
         "The External Id provided on the configuration file does not exist on the extracted record(s). Please ensure it is included in the object's query."
       );
     }
 
-    records.forEach((record) => {
+    const promises = records.map(async (record) => {
       removeField(record, "attributes");
-      this.removeNullFields(record, sObjectType);
+      this.removeNullFields(record, objectConfig);
       let fileName = record[externalIdField];
-      if (fileName == null) {
+      if (!fileName) {
         throw new SfdxError(
           "There are records without External Ids. Ensure all records that are extracted have a value for the field specified as the External Id."
         );
-      } else {
-        fileName = pathUtils.join(dirPath, `${fileName.replace(/\s+/g, "-")}.json`);
-        fs.writeFile(fileName, JSON.stringify(record, undefined, 2), function (err) {
-          if (err) {
-            throw err;
-          }
-        });
       }
+      fileName = pathUtils.join(dirPath, `${fileName.replace(/\s+/g, "-")}.json`);
+      await fsp.writeFile(fileName, JSON.stringify(record, undefined, 2));
     });
+
+    await Promise.all(promises);
   }
 
-  private removeNullFields(record: Record, sObjectType: string) {
-    const cleanupFields = this.dataConfig.objects[sObjectType].cleanupFields;
+  private removeNullFields(record: Record, objectConfig: ObjectConfig) {
+    const cleanupFields = objectConfig.cleanupFields;
     if (cleanupFields) {
       cleanupFields.forEach((field) => {
         if (null === record[field]) {
@@ -99,36 +129,43 @@ export default class Export extends SfdxCommand {
     }
   }
 
-  private async getExportRecords(sObjectType: string): Promise<Record[]> {
-    const queryResult = await this.org
-      .getConnection()
-      .query<Record>(this.dataConfig.objects[sObjectType].query, { autoFetch: true, maxFetch: 100000 });
-    this.ux.log("total in database : " + queryResult.totalSize);
-    this.ux.log("total fetched : " + (queryResult.records ? queryResult.records.length : 0));
-    return queryResult.records || [];
+  private async getExportRecords(objectConfig: ObjectConfig): Promise<Record[]> {
+    return new Promise((resolve, reject) => {
+      var records = [];
+      this.org
+        .getConnection()
+        .query(objectConfig.query)
+        .on("record", (record) => {
+          records.push(record);
+        })
+        .on("end", () => {
+          resolve(records);
+        })
+        .on("error", (err) => {
+          reject(err);
+        })
+        .run({ autoFetch: true, maxFetch: 100000 });
+    });
   }
 
-  private clearDirectory(dirPath: string) {
+  private async clearDirectory(dirPath: string): Promise<void> {
     if (fs.existsSync(dirPath)) {
-      fs.readdirSync(dirPath).forEach((file) => {
-        fs.unlink(dirPath + "/" + file, (err) => {
-          if (err) {
-            throw err;
-          }
-        });
+      const items = await fsp.readdir(dirPath);
+      const promises = items.map(async (item) => {
+        await fsp.unlink(pathUtils.join(dirPath, item));
       });
+      await Promise.all(promises);
     } else {
       fs.mkdirSync(dirPath);
     }
   }
 
-  private async preExportObject(sObjectType: string) {
+  private async preExportObject(objectConfig: ObjectConfig) {
     const scriptPath = this.dataConfig?.script?.preimportobject;
     if (scriptPath) {
       const context: PreExportObjectContext = {
         ...this.context,
-        sObjectType,
-        objectConfig: this.dataConfig.objects?.[sObjectType],
+        objectConfig,
       };
 
       await runScript<PreExportObjectContext>(scriptPath, context, {
@@ -137,13 +174,12 @@ export default class Export extends SfdxCommand {
     }
   }
 
-  private async postExportObject(sObjectType: string, records: Record[]) {
+  private async postExportObject(objectConfig: ObjectConfig, records: Record[]) {
     const scriptPath = this.dataConfig?.script?.postimportobject;
     if (scriptPath) {
       const context: PostExportObjectContext = {
         ...this.context,
-        sObjectType,
-        objectConfig: this.dataConfig.objects?.[sObjectType],
+        objectConfig,
         records,
       };
 
@@ -153,23 +189,28 @@ export default class Export extends SfdxCommand {
     }
   }
 
-  private async exportObject(sObjectType: string): Promise<ExportResult> {
-    await this.preExportObject(sObjectType)
+  private async exportObject(objectConfig: ObjectConfig): Promise<ExportResult> {
+    await this.preExportObject(objectConfig);
 
-    this.ux.startSpinner(`Retrieving ${colors.blue(sObjectType)} records, please wait...`);
+    this.ux.startSpinner(`Retrieving ${colors.blue(objectConfig.sObjectType)} records`);
 
-    const records: Record[] = await this.getExportRecords(sObjectType);
-    const dirPath = pathUtils.join("data", this.dataConfig.objects?.[sObjectType]?.directory || sObjectType);
-    this.clearDirectory(dirPath);
-    this.exportRecordsToDir(records, sObjectType, dirPath);
+    const records: Record[] = await this.getExportRecords(objectConfig);
+    const path = pathUtils.join(process.cwd(), "data", objectConfig.directory || objectConfig.sObjectType);
 
-    await this.postExportObject(sObjectType, records);
+    await this.clearDirectory(path);
+    await this.exportRecordsToDir(records, objectConfig, path);
 
-    this.ux.stopSpinner(`Request completed! Received ${records.length} records.`);
+    await this.postExportObject(objectConfig, records);
+
+    const total = records ? records.length : 0;
+
+    this.ux.stopSpinner(`Saved ${total} records to ${path}`);
 
     return {
-      sObjectType,
-      records
+      sObjectType: objectConfig.sObjectType,
+      total,
+      path,
+      records,
     };
   }
 
@@ -193,6 +234,7 @@ export default class Export extends SfdxCommand {
   }
 
   public async run(): Promise<AnyJson> {
+    const objectConfigs = this.objectsToProcess;
     this.context = {
       command: {
         args: this.args,
@@ -207,16 +249,15 @@ export default class Export extends SfdxCommand {
         result: this.result,
       },
       config: this.dataConfig,
+      objectConfigs,
       state: {},
     };
 
     await this.preExport();
 
-    const sObjectTypes = this.objectsToProcess;
-
     const results: ExportResult[] = [];
-    for (const sObjectType of sObjectTypes) {
-      results.push(await this.exportObject(sObjectType));
+    for (const objectConfig of objectConfigs) {
+      results.push(await this.exportObject(objectConfig));
     }
 
     await this.postExport(results);

@@ -161,7 +161,7 @@ USAGE
 <!-- usagestop -->
 <!-- commands -->
 * [`json-bourne-sfdx bourne:export [-o <string>] [-c <string>] [-a] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#json-bourne-sfdx-bourneexport--o-string--c-string--a--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
-* [`json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#json-bourne-sfdx-bourneimport--o-string--c-string--a--d-string--r--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
+* [`json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-p] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`](#json-bourne-sfdx-bourneimport--o-string--c-string--a--d-string--r--p--u-string---apiversion-string---json---loglevel-tracedebuginfowarnerrorfataltracedebuginfowarnerrorfatal)
 
 ## `json-bourne-sfdx bourne:export [-o <string>] [-c <string>] [-a] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
 
@@ -181,7 +181,7 @@ OPTIONS
   -c, --configfile=configfile                                                       [REQUIRED] The configuration JSON
                                                                                     file location.
 
-  -o, --object=object                                                               The sobject that you wish to
+  -o, --object=object                                                               The sobject(s) that you wish to
                                                                                     import/export reference data from.
 
   -u, --targetusername=targetusername                                               username or alias for the target
@@ -202,7 +202,7 @@ EXAMPLE
 
 _See code: [lib/commands/bourne/export.js](https://github.com/realestate-com-au/json-bourne-sfdx-cli/blob/v1.0.0/lib/commands/bourne/export.js)_
 
-## `json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
+## `json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-p] [-u <string>] [--apiversion <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]`
 
 Imports records from the object specified.
 
@@ -210,7 +210,7 @@ Imports records from the object specified.
 Imports records from the object specified.
 
 USAGE
-  $ json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-u <string>] [--apiversion 
+  $ json-bourne-sfdx bourne:import [-o <string>] [-c <string>] [-a] [-d <string>] [-r] [-p] [-u <string>] [--apiversion 
   <string>] [--json] [--loglevel trace|debug|info|warn|error|fatal|TRACE|DEBUG|INFO|WARN|ERROR|FATAL]
 
 OPTIONS
@@ -223,8 +223,11 @@ OPTIONS
   -d, --datadir=datadir                                                             The path where the reference data
                                                                                     resides. The default is 'data'.
 
-  -o, --object=object                                                               The sobject that you wish to
+  -o, --object=object                                                               The sobject(s) that you wish to
                                                                                     import/export reference data from.
+
+  -p, --allowpartial                                                                Allows the operation to continue
+                                                                                    when a failure occurs.
 
   -r, --remove                                                                      Delete the record(s) from the target
                                                                                     within the specified directory.
